@@ -78,7 +78,6 @@ Notificaciones:
 
 ## Administradores
 - Los admins viven en la tabla `admin_users`.
-- El seed inicial registra a `weelmer.moreno@pffsa.com` como administrador.
 - Un administrador puede agregar mas administradores desde la interfaz `/admin`.
 
 ## Migracion recomendada
