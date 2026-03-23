@@ -38,6 +38,7 @@ Mover SSD a una arquitectura mas simple y administrable:
 
 ### Base de datos
 - Se creo la migracion base en `supabase/migrations/20260323_150000_ssd_base.sql`.
+- Se agrego `supabase/config.toml` para facilitar el trabajo local con Supabase CLI.
 - Incluye:
   - `profiles`
   - helper de `current_user_email()`
@@ -75,6 +76,7 @@ Un usuario puede ver una solicitud si:
 - Aplicar SQL base
 - Cargar seed funcional
 - Poner variables en Vercel
+- Mantener el backend Express expuesto mientras siga el modo puente
 
 ### Fase 2
 - Cambiar frontend a Supabase Auth definitivo
@@ -104,11 +106,33 @@ Y para desarrollo local:
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
 - `NEXT_PUBLIC_APP_URL`
+- `NEXT_PUBLIC_API_URL`
+- `API_BASE_URL`
 
 ### Supabase Edge Functions
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RESEND_API_KEY` o credenciales para Microsoft Graph
+
+## Modo puente actual
+
+Aunque el login ya corre con Supabase, el frontend todavia consulta:
+- catalogos
+- dashboard
+- solicitudes
+- aprobaciones
+- admin
+
+desde el backend Express en `frontend/src/shared/lib/api.ts`.
+
+Eso significa que un despliegue inmediato en Vercel necesita una API publica disponible y declarada en:
+- `NEXT_PUBLIC_API_URL`
+- `API_BASE_URL`
+
+La recomendacion es:
+1. desplegar primero el backend actual en un host temporal
+2. conectar Vercel a ese backend
+3. luego migrar gradualmente esas lecturas y escrituras a Supabase
 
 ## Que quitar de Express a futuro
 

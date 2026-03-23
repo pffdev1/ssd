@@ -23,6 +23,14 @@ Portal corporativo para centralizar solicitudes de:
 - Archivos en `Supabase Storage`
 - Automatizaciones en `Supabase Edge Functions`
 
+## Estado actual de despliegue
+- El login del frontend ya esta preparado para `Supabase Auth`.
+- La base SQL inicial ya vive en `supabase/migrations`.
+- El frontend todavia consume datos del backend `Express` para catalogos, solicitudes, aprobaciones y admin.
+- Si despliegas hoy en `Vercel`, tambien necesitas una URL publica del backend y configurar:
+  - `NEXT_PUBLIC_API_URL`
+  - `API_BASE_URL`
+
 ## Que incluye esta version
 - Login corporativo con Microsoft Entra ID.
 - Captura automatica del solicitante desde la sesion autenticada.
@@ -87,6 +95,7 @@ La ruta recomendada ahora es:
 
 Guia detallada:
 - `docs/supabase-vercel-migration.md`
+- `docs/go-live-supabase-vercel.md`
 
 ## Proximos pasos sugeridos
 - Aplicar la migracion SQL de `supabase/migrations`.
