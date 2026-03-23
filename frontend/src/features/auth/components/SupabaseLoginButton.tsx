@@ -32,6 +32,7 @@ export function SupabaseLoginButton({ disabled = false }: { disabled?: boolean }
         provider: "azure",
         options: {
           redirectTo,
+          scopes: "email",
           queryParams: {
             prompt: "select_account"
           }
