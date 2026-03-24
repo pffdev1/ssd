@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { signOut as microsoftSignOut } from "next-auth/react";
 import { infoToast } from "@/src/shared/lib/toast";
 import { AppUser, RequestType } from "@/src/shared/lib/types";
 import { BrandMark } from "./BrandMark";
@@ -198,6 +199,12 @@ export function AppHeader({
 
   async function handleSignOut() {
     await fetch("/auth/local-logout", { method: "POST" });
+
+    try {
+      await microsoftSignOut({ redirect: false });
+    } catch {
+      // If there is no Microsoft session, continue with local redirect.
+    }
 
     window.location.assign("/login");
   }

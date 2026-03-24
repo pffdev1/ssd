@@ -2,11 +2,18 @@ import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import Image from "next/image";
 import { auth } from "@/auth";
+import { MicrosoftEntraLoginButton } from "@/src/features/auth/components/MicrosoftEntraLoginButton";
 
 const LOCAL_SESSION_COOKIE = "ssd_local_session";
 
 export default async function LoginPage() {
   const session = await auth();
+  const entraReady = Boolean(
+    process.env.AUTH_MICROSOFT_ENTRA_ID_ID &&
+      process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
+      process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID &&
+      process.env.AUTH_SECRET
+  );
 
   if (session?.user?.email) {
     redirect("/");
@@ -71,14 +78,22 @@ export default async function LoginPage() {
             <div className="w-full rounded-[2rem] border border-[#7197bf] bg-white p-6 shadow-[0_18px_50px_rgba(0,21,52,0.08)] sm:p-8">
               <div className="text-xs uppercase tracking-[0.25em] text-[#1f406b]">Ingreso corporativo</div>
               <h2 className="mt-4 text-3xl font-semibold text-[#001534]">Entrar a SSD</h2>
-              <p className="mt-4 text-sm leading-7 text-[#1e3a5f]">Acceso local habilitado para entorno Docker de desarrollo.</p>
-              <div className="mt-8">
+              <p className="mt-4 text-sm leading-7 text-[#1e3a5f]">Usa tu cuenta corporativa de Pedersen para continuar.</p>
+              <div className="mt-8 space-y-4">
+                <MicrosoftEntraLoginButton disabled={!entraReady} />
+
+                {!entraReady ? (
+                  <p className="rounded-2xl border border-[#ffd4a8] bg-[#fff7ed] px-4 py-3 text-sm leading-6 text-[#9a3412]">
+                    Falta configurar `AUTH_MICROSOFT_ENTRA_ID_ID`, `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `AUTH_MICROSOFT_ENTRA_ID_TENANT_ID` y `AUTH_SECRET`.
+                  </p>
+                ) : null}
+
                 <form action={loginLocal}>
                   <button
                     type="submit"
-                    className="flex w-full items-center justify-center gap-4 rounded-[1.5rem] border border-[#bfd2e7] bg-white px-6 py-4 text-sm font-semibold text-[#001534] transition hover:border-[#9cb8d6] hover:bg-[#f5faff]"
+                    className="flex w-full items-center justify-center gap-4 rounded-[1.5rem] border border-[#bfd2e7] bg-[#f7fbff] px-6 py-4 text-sm font-semibold text-[#1e3a5f] transition hover:border-[#9cb8d6] hover:bg-[#f5faff]"
                   >
-                    Entrar en modo local
+                    Entrar en modo local (respaldo)
                   </button>
                 </form>
               </div>
