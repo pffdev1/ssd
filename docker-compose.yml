@@ -28,8 +28,8 @@ services:
       NODE_ENV: production
       PORT: 4000
       DATABASE_URL: ${DATABASE_URL:-postgresql://ssd_user:ssd_password@db:5432/ssd}
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
-      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3000}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000,https://ssd.pedersenfinefoods.com}
+      APP_BASE_URL: ${APP_BASE_URL:-https://ssd.pedersenfinefoods.com}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-587}
       SMTP_SECURE: ${SMTP_SECURE:-false}
@@ -54,9 +54,10 @@ services:
       NODE_ENV: production
       PORT: 3000
       API_BASE_URL: ${API_BASE_URL:-http://backend:4000/api}
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000/api}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://ssd.pedersenfinefoods.com/api}
       AUTH_SECRET: ${AUTH_SECRET:-replace-this-secret}
       AUTH_TRUST_HOST: "true"
+      AUTH_URL: ${AUTH_URL:-https://ssd.pedersenfinefoods.com}
       AUTH_MICROSOFT_ENTRA_ID_ID: ${AUTH_MICROSOFT_ENTRA_ID_ID:-}
       AUTH_MICROSOFT_ENTRA_ID_SECRET: ${AUTH_MICROSOFT_ENTRA_ID_SECRET:-}
       AUTH_MICROSOFT_ENTRA_ID_TENANT_ID: ${AUTH_MICROSOFT_ENTRA_ID_TENANT_ID:-}
@@ -67,5 +68,22 @@ services:
     ports:
       - "3000:3000"
 
+  caddy:
+    image: caddy:2-alpine
+    container_name: ssd-caddy
+    restart: unless-stopped
+    depends_on:
+      - frontend
+      - backend
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
 volumes:
   postgres-data:
+  caddy-data:
+  caddy-config:

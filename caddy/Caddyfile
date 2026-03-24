@@ -1,0 +1,27 @@
+{
+  # Ajusta este correo al del administrador del servidor si lo deseas.
+  email admin@pffsa.com
+}
+
+ssd.pedersenfinefoods.com {
+  encode gzip zstd
+
+  # Para red interna sin ACME publico usamos CA interna de Caddy.
+  # Si luego habilitas certificado publico, reemplaza por:
+  # tls you@example.com
+  tls internal
+
+  @nextauth path /api/auth*
+  handle @nextauth {
+    reverse_proxy frontend:3000
+  }
+
+  @backend path /api/*
+  handle @backend {
+    reverse_proxy backend:4000
+  }
+
+  handle {
+    reverse_proxy frontend:3000
+  }
+}
