@@ -14,47 +14,17 @@ import {
   WorkflowStepTemplate
 } from "./types";
 
-function normalizeBaseUrl(value?: string) {
-  if (!value) {
-    return undefined;
-  }
-
-  const normalized = value.trim().replace(/\/+$/, "");
-
-  if (!normalized || !/^https?:\/\//i.test(normalized)) {
-    return undefined;
-  }
-
-  try {
-    const url = new URL(normalized);
-
-    if (url.pathname === "/") {
-      url.pathname = "/api";
-    }
-
-    return url.toString().replace(/\/+$/, "");
-  } catch {
-    return undefined;
-  }
-}
-
 function getServerBaseUrl() {
-  return (
-    normalizeBaseUrl(process.env.API_BASE_URL) ??
-    normalizeBaseUrl(process.env.NEXT_PUBLIC_API_URL) ??
-    "http://localhost:4000/api"
-  );
+  return process.env.API_BASE_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api";
 }
 
 async function fetchJson<T>(path: string): Promise<T> {
-  const baseUrl = getServerBaseUrl();
-  const url = `${baseUrl}${path}`;
-  const response = await fetch(url, {
+  const response = await fetch(`${getServerBaseUrl()}${path}`, {
     cache: "no-store"
   });
 
   if (!response.ok) {
-    throw new Error(`API request failed for ${path} (${response.status}) using ${url}`);
+    throw new Error(`API request failed for ${path}`);
   }
 
   return response.json();

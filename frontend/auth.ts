@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { createClient as createSupabaseServerClient, hasSupabaseConfig } from "@/src/shared/lib/supabase/server";
+import { cookies } from "next/headers";
 
 export type AppSession = {
   user: {
@@ -9,33 +9,50 @@ export type AppSession = {
   };
 };
 
-function getDisplayName(user: Record<string, unknown>, email: string) {
-  return (
-    (user.user_metadata as Record<string, unknown> | undefined)?.full_name ??
-    (user.user_metadata as Record<string, unknown> | undefined)?.name ??
-    email
-  );
+const LOCAL_SESSION_COOKIE = "ssd_local_session";
+
+type LocalSessionPayload = {
+  name: string;
+  email: string;
+};
+
+function decodeLocalSession(raw: string): LocalSessionPayload | null {
+  try {
+    const json = Buffer.from(raw, "base64url").toString("utf8");
+    const payload = JSON.parse(json) as Partial<LocalSessionPayload>;
+
+    if (!payload.email || !payload.name) {
+      return null;
+    }
+
+    return {
+      name: String(payload.name),
+      email: String(payload.email).toLowerCase()
+    };
+  } catch {
+    return null;
+  }
 }
 
 export const auth = cache(async (): Promise<AppSession | null> => {
-  if (!hasSupabaseConfig()) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get(LOCAL_SESSION_COOKIE)?.value;
+
+  if (!token) {
     return null;
   }
 
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { user }
-  } = await supabase.auth.getUser();
+  const session = decodeLocalSession(token);
 
-  if (!user?.email) {
+  if (!session) {
     return null;
   }
 
   return {
     user: {
-      id: user.id,
-      email: user.email,
-      name: String(getDisplayName(user as unknown as Record<string, unknown>, user.email))
+      id: session.email,
+      email: session.email,
+      name: session.name
     }
   };
 });

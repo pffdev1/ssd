@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { infoToast } from "@/src/shared/lib/toast";
-import { createClient as createSupabaseClient } from "@/src/shared/lib/supabase/client";
 import { AppUser, RequestType } from "@/src/shared/lib/types";
 import { BrandMark } from "./BrandMark";
 
@@ -198,12 +197,7 @@ export function AppHeader({
   }
 
   async function handleSignOut() {
-    try {
-      const supabase = createSupabaseClient();
-      await supabase.auth.signOut();
-    } catch {
-      // If Supabase is not configured or signOut fails, continue to login.
-    }
+    await fetch("/auth/local-logout", { method: "POST" });
 
     window.location.assign("/login");
   }
