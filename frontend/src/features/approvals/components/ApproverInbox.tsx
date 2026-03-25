@@ -27,7 +27,7 @@ export function ApproverInbox({ user, items }: { user: AppUser; items: PendingAp
     try {
       const operation = (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/requests/${item.id}/steps/${item.step_id}/decision`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/requests/${item.id}/steps/${item.step_id}/decision`,
           {
             method: "POST",
             headers: {

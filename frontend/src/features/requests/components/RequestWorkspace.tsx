@@ -322,7 +322,7 @@ export function RequestWorkspace({
           normalizedPayload.diasTomados = String(vacationDays);
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/requests`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/requests`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"

@@ -132,8 +132,8 @@ export function CatalogSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingItemId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/catalog-items/${editingItemId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/catalog-items`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/catalog-items/${editingItemId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/catalog-items`;
           const response = await fetch(endpoint, {
             method: editingItemId ? "PATCH" : "POST",
             headers: {
@@ -183,8 +183,8 @@ export function CatalogSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingRequestTypeId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/request-types/${editingRequestTypeId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/request-types`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${editingRequestTypeId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types`;
           const response = await fetch(endpoint, {
             method: editingRequestTypeId ? "PATCH" : "POST",
             headers: {
@@ -243,7 +243,7 @@ export function CatalogSection({
       const data = await runWithToast(
         (async () => {
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/request-types/${editingRequestTypeId}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${editingRequestTypeId}?actorEmail=${encodeURIComponent(currentUser.email)}`,
             {
               method: "DELETE"
             }

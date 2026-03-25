@@ -31,7 +31,7 @@ export function AdminUsersSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admins`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admins`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"

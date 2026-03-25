@@ -114,7 +114,7 @@ export function WorkflowStepsSection({
       const data = await runWithToast(
         (async () => {
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/workflow-steps/${selectedStep.id}`,
+            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps/${selectedStep.id}`,
             {
               method: "PATCH",
               headers: {
@@ -161,7 +161,7 @@ export function WorkflowStepsSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/workflow-steps`, {
+          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -231,7 +231,7 @@ export function WorkflowStepsSection({
       const data = await runWithToast(
         (async () => {
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/workflow-steps/${selectedStep.id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps/${selectedStep.id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
             {
               method: "DELETE"
             }

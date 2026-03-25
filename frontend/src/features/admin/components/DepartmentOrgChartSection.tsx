@@ -353,7 +353,7 @@ export function DepartmentOrgChartSection({
     const data = await runWithToast(
       (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}/assignment-role`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/assignment-role`,
           {
             method: "POST",
             headers: {
@@ -387,7 +387,7 @@ export function DepartmentOrgChartSection({
   async function moveApprover(id: string, direction: "up" | "down") {
     const data = await runWithToast(
       (async () => {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}/move`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/move`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -420,7 +420,7 @@ export function DepartmentOrgChartSection({
     const data = await runWithToast(
       (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
           {
             method: "DELETE"
           }
@@ -461,8 +461,8 @@ export function DepartmentOrgChartSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingUnitId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/org-units/${editingUnitId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/org-units`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/org-units/${editingUnitId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/org-units`;
 
           const response = await fetch(endpoint, {
             method: editingUnitId ? "PATCH" : "POST",
@@ -521,8 +521,8 @@ export function DepartmentOrgChartSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingApproverId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${editingApproverId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${editingApproverId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers`;
 
           const response = await fetch(endpoint, {
             method: editingApproverId ? "PATCH" : "POST",
@@ -591,8 +591,8 @@ export function DepartmentOrgChartSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingEmployeeId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/employee-profiles/${editingEmployeeId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/employee-profiles`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/employee-profiles/${editingEmployeeId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/employee-profiles`;
 
           const response = await fetch(endpoint, {
             method: editingEmployeeId ? "PATCH" : "POST",
@@ -639,7 +639,7 @@ export function DepartmentOrgChartSection({
     const data = await runWithToast(
       (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/employee-profiles/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/employee-profiles/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
           {
             method: "DELETE"
           }

@@ -114,7 +114,7 @@ export function WorkflowSection({
       const data = await runWithToast(
         (async () => {
           const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/request-types/${selectedRequestType.id}/workflow`,
+            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${selectedRequestType.id}/workflow`,
             {
               method: "PATCH",
               headers: {

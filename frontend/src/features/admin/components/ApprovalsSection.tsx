@@ -182,8 +182,8 @@ export function ApprovalsSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingApproverId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${editingApproverId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers`;
+            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${editingApproverId}`
+            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers`;
           const response = await fetch(endpoint, {
             method: editingApproverId ? "PATCH" : "POST",
             headers: {
@@ -233,7 +233,7 @@ export function ApprovalsSection({
   async function moveApprover(id: string, direction: "up" | "down") {
     const data = await runWithToast(
       (async () => {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}/move`, {
+        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/move`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -266,7 +266,7 @@ export function ApprovalsSection({
     const data = await runWithToast(
       (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
           {
             method: "DELETE"
           }
@@ -294,7 +294,7 @@ export function ApprovalsSection({
     const data = await runWithToast(
       (async () => {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api"}/admin/approvers/${id}/assignment-role`,
+          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/assignment-role`,
           {
             method: "POST",
             headers: {
