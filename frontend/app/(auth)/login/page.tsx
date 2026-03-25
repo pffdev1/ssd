@@ -1,39 +1,18 @@
 import { redirect } from "next/navigation";
-import { cookies } from "next/headers";
 import Image from "next/image";
 import { auth } from "@/auth";
 import { MicrosoftEntraLoginButton } from "@/src/features/auth/components/MicrosoftEntraLoginButton";
-
-const LOCAL_SESSION_COOKIE = "ssd_local_session";
 
 export default async function LoginPage() {
   const session = await auth();
   const entraReady = Boolean(
     process.env.AUTH_MICROSOFT_ENTRA_ID_ID &&
       process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
-      process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID &&
+      (process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER || process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID) &&
       process.env.AUTH_SECRET
   );
 
   if (session?.user?.email) {
-    redirect("/");
-  }
-
-  async function loginLocal() {
-    "use server";
-
-    const name = process.env.LOCAL_AUTH_NAME ?? "Weelmer Moreno";
-    const email = (process.env.LOCAL_AUTH_EMAIL ?? "weelmer.moreno@pffsa.com").toLowerCase();
-    const payload = Buffer.from(JSON.stringify({ name, email }), "utf8").toString("base64url");
-
-    const cookieStore = await cookies();
-    cookieStore.set(LOCAL_SESSION_COOKIE, payload, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/"
-    });
-
     redirect("/");
   }
 
@@ -84,18 +63,9 @@ export default async function LoginPage() {
 
                 {!entraReady ? (
                   <p className="rounded-2xl border border-[#ffd4a8] bg-[#fff7ed] px-4 py-3 text-sm leading-6 text-[#9a3412]">
-                    Falta configurar `AUTH_MICROSOFT_ENTRA_ID_ID`, `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `AUTH_MICROSOFT_ENTRA_ID_TENANT_ID` y `AUTH_SECRET`.
+                    Falta configurar `AUTH_MICROSOFT_ENTRA_ID_ID`, `AUTH_MICROSOFT_ENTRA_ID_SECRET`, `AUTH_MICROSOFT_ENTRA_ID_ISSUER` (o `AUTH_MICROSOFT_ENTRA_ID_TENANT_ID`) y `AUTH_SECRET`.
                   </p>
                 ) : null}
-
-                <form action={loginLocal}>
-                  <button
-                    type="submit"
-                    className="flex w-full items-center justify-center gap-4 rounded-[1.5rem] border border-[#bfd2e7] bg-[#f7fbff] px-6 py-4 text-sm font-semibold text-[#1e3a5f] transition hover:border-[#9cb8d6] hover:bg-[#f5faff]"
-                  >
-                    Entrar en modo local (respaldo)
-                  </button>
-                </form>
               </div>
             </div>
           </section>

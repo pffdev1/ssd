@@ -1,5 +1,4 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
 import NextAuth from "next-auth";
 import MicrosoftEntraID from "next-auth/providers/microsoft-entra-id";
 
@@ -11,13 +10,18 @@ export type AppSession = {
   };
 };
 
-const LOCAL_SESSION_COOKIE = "ssd_local_session";
-
 const microsoftAuthEnabled = Boolean(
   process.env.AUTH_MICROSOFT_ENTRA_ID_ID &&
-    process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET &&
-    process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID
+    process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET
 );
+
+const rawIssuer =
+  process.env.AUTH_MICROSOFT_ENTRA_ID_ISSUER ??
+  (process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID
+    ? `https://login.microsoftonline.com/${process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID}/v2.0`
+    : undefined);
+
+const issuer = rawIssuer ? rawIssuer.replace(/\/+$/, "") : undefined;
 
 const nextAuthInstance = NextAuth({
   secret: process.env.AUTH_SECRET,
@@ -27,7 +31,7 @@ const nextAuthInstance = NextAuth({
         MicrosoftEntraID({
           clientId: process.env.AUTH_MICROSOFT_ENTRA_ID_ID!,
           clientSecret: process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET!,
-          issuer: `https://login.microsoftonline.com/${process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID}/v2.0`
+          issuer
         })
       ]
     : [],
@@ -37,29 +41,6 @@ const nextAuthInstance = NextAuth({
 });
 
 export const { handlers, signIn, signOut, auth: getNextAuthSession } = nextAuthInstance;
-
-type LocalSessionPayload = {
-  name: string;
-  email: string;
-};
-
-function decodeLocalSession(raw: string): LocalSessionPayload | null {
-  try {
-    const json = Buffer.from(raw, "base64url").toString("utf8");
-    const payload = JSON.parse(json) as Partial<LocalSessionPayload>;
-
-    if (!payload.email || !payload.name) {
-      return null;
-    }
-
-    return {
-      name: String(payload.name),
-      email: String(payload.email).toLowerCase()
-    };
-  } catch {
-    return null;
-  }
-}
 
 export const auth = cache(async (): Promise<AppSession | null> => {
   const nextAuthSession = await getNextAuthSession();
@@ -73,25 +54,5 @@ export const auth = cache(async (): Promise<AppSession | null> => {
       }
     };
   }
-
-  const cookieStore = await cookies();
-  const token = cookieStore.get(LOCAL_SESSION_COOKIE)?.value;
-
-  if (!token) {
-    return null;
-  }
-
-  const session = decodeLocalSession(token);
-
-  if (!session) {
-    return null;
-  }
-
-  return {
-    user: {
-      id: session.email,
-      email: session.email,
-      name: session.name
-    }
-  };
+  return null;
 });

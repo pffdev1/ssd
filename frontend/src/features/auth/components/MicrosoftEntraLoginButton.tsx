@@ -1,5 +1,7 @@
 "use client";
 
+import { signIn } from "next-auth/react";
+
 function MicrosoftMark() {
   return (
     <span className="grid grid-cols-2 gap-[3px] rounded-[0.35rem] bg-white p-[3px] shadow-sm">
@@ -12,12 +14,12 @@ function MicrosoftMark() {
 }
 
 export function MicrosoftEntraLoginButton({ disabled = false }: { disabled?: boolean }) {
-  function handleLogin() {
+  async function handleLogin() {
     if (disabled) {
       return;
     }
 
-    window.location.assign("/api/auth/signin/microsoft-entra-id?callbackUrl=/");
+    await signIn("microsoft-entra-id", { callbackUrl: "/" });
   }
 
   return (

@@ -198,12 +198,10 @@ export function AppHeader({
   }
 
   async function handleSignOut() {
-    await fetch("/auth/local-logout", { method: "POST" });
-
     try {
       await microsoftSignOut({ redirect: false });
     } catch {
-      // If there is no Microsoft session, continue with local redirect.
+      // If signout fails, fallback to login redirect.
     }
 
     window.location.assign("/login");
