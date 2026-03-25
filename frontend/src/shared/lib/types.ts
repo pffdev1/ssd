@@ -83,6 +83,17 @@ export interface RequestDetail extends RequestItem {
 export interface AppUser {
   name: string;
   email: string;
+  companyName?: string;
+  department?: string;
+  jobTitle?: string;
+  employeeId?: string;
+  employeeType?: string;
+  employeeHireDate?: string;
+  officeLocation?: string;
+  managerEmail?: string;
+  managerName?: string;
+  managerTitle?: string;
+  sponsors?: string[];
   isAdmin?: boolean;
   isApprover?: boolean;
   canManagePeopleFlows?: boolean;

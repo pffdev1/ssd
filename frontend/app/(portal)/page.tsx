@@ -107,7 +107,7 @@ export default async function HomePage() {
       <section className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="rounded-[2rem] border border-[#bfd2e7] bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
           <div className="text-xs uppercase tracking-[0.24em] text-[#1f406b]">Catalogo rapido</div>
-          <div className="mt-5 space-y-3">
+          <div className="mt-5 max-h-[32rem] space-y-3 overflow-y-auto pr-1">
             {catalog.requestTypes
               .filter((type) => !["PERSONNEL_REQUEST", "TERMINATION_REQUEST"].includes(type.code) || currentUser.canManagePeopleFlows)
               .map((type) => (
@@ -135,8 +135,8 @@ export default async function HomePage() {
               Nueva solicitud
             </Link>
           </div>
-          <div className="space-y-4">
-            {requests.slice(0, 6).map((item) => (
+          <div className="max-h-[32rem] space-y-4 overflow-y-auto pr-1">
+            {requests.slice(0, 10).map((item) => (
               <Link
                 key={item.id}
                 href={`/requests/${item.id}`}

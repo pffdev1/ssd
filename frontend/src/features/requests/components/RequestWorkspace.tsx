@@ -191,7 +191,22 @@ export function RequestWorkspace({
       .filter((step) => step.routing === "department" || step.routing === "requester_unit")
       .map((step) => {
         const approver = catalog.approvers.find((item) => item.department === department && item.role_code === step.code);
-        const isSelf = approver ? approver.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase() : false;
+        const graphManagerPreview =
+          step.routing === "requester_unit" && currentUser.managerEmail
+            ? {
+                full_name: currentUser.managerName ?? "Jefatura inmediata",
+                email: currentUser.managerEmail,
+                title: currentUser.managerTitle ?? "Jefatura inmediata"
+              }
+            : null;
+        const resolvedApprover = approver
+          ? {
+              full_name: approver.full_name,
+              email: approver.email,
+              title: approver.title
+            }
+          : graphManagerPreview;
+        const isSelf = resolvedApprover ? resolvedApprover.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase() : false;
         const stepIndex = selectedType.workflow.steps.findIndex((item) => item.code === step.code);
         const nextStep = isSelf
           ? selectedType.workflow.steps.slice(stepIndex + 1).find((candidate) => {
@@ -217,7 +232,7 @@ export function RequestWorkspace({
 
         return {
           step,
-          approver,
+          approver: resolvedApprover,
           isSelf,
           nextStep,
           nextApprover
@@ -331,6 +346,9 @@ export function RequestWorkspace({
             requestTypeCode: selectedType.code,
             requesterName: currentUser.name,
             requesterEmail: currentUser.email,
+            requesterManagerName: currentUser.managerName,
+            requesterManagerEmail: currentUser.managerEmail,
+            requesterManagerTitle: currentUser.managerTitle,
             department,
             subject,
             justification,
@@ -440,6 +458,14 @@ export function RequestWorkspace({
               <label className="text-sm font-medium text-[#1e3a5f]">Correo corporativo</label>
               <div className="rounded-2xl border border-[#d7e4f2] bg-[#f5faff] px-4 py-3 text-sm text-[#001534]">
                 {currentUser.email}
+              </div>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <label className="text-sm font-medium text-[#1e3a5f]">Jefatura inmediata (Microsoft Entra)</label>
+              <div className="rounded-2xl border border-[#d7e4f2] bg-[#f5faff] px-4 py-3 text-sm text-[#001534]">
+                {currentUser.managerName || currentUser.managerEmail
+                  ? `${currentUser.managerName ?? "Supervisor"}${currentUser.managerEmail ? ` | ${currentUser.managerEmail}` : ""}`
+                  : "No disponible en Entra. SSD aplicara el fallback por departamento/organigrama."}
               </div>
             </div>
           </div>

@@ -73,11 +73,35 @@ export function buildCurrentUser(
   email: string,
   isAdmin: boolean,
   profiles: ApproverProfile[],
-  userRoles: UserRoleAssignment[]
+  userRoles: UserRoleAssignment[],
+  directory?: {
+    companyName?: string;
+    department?: string;
+    jobTitle?: string;
+    employeeId?: string;
+    employeeType?: string;
+    employeeHireDate?: string;
+    officeLocation?: string;
+    managerEmail?: string;
+    managerName?: string;
+    managerTitle?: string;
+    sponsors?: string[];
+  }
 ): AppUser {
   return {
     name: sessionName ?? email.split("@")[0],
     email,
+    companyName: directory?.companyName,
+    department: directory?.department,
+    jobTitle: directory?.jobTitle,
+    employeeId: directory?.employeeId,
+    employeeType: directory?.employeeType,
+    employeeHireDate: directory?.employeeHireDate,
+    officeLocation: directory?.officeLocation,
+    managerEmail: directory?.managerEmail,
+    managerName: directory?.managerName,
+    managerTitle: directory?.managerTitle,
+    sponsors: directory?.sponsors,
     isAdmin,
     isApprover: profiles.length > 0,
     canManagePeopleFlows: canManagePeopleFlows(isAdmin, profiles, userRoles),

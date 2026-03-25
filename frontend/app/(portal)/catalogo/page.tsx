@@ -27,7 +27,14 @@ export default async function CatalogPage({
     getApproverInbox(session.user.email)
   ]);
 
-  const currentUser = buildCurrentUser(session.user.name, session.user.email, adminCheck.isAdmin, approverProfiles, userRoles);
+  const currentUser = buildCurrentUser(session.user.name, session.user.email, adminCheck.isAdmin, approverProfiles, userRoles, {
+    department: session.user.department,
+    jobTitle: session.user.jobTitle,
+    officeLocation: session.user.officeLocation,
+    managerEmail: session.user.managerEmail,
+    managerName: session.user.managerName,
+    managerTitle: session.user.managerTitle
+  });
   const visibleTypes = catalog.requestTypes.filter(
     (type) => !["PERSONNEL_REQUEST", "TERMINATION_REQUEST"].includes(type.code) || currentUser.canManagePeopleFlows
   );

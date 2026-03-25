@@ -19,7 +19,14 @@ export function MicrosoftEntraLoginButton({ disabled = false }: { disabled?: boo
       return;
     }
 
-    await signIn("microsoft-entra-id", { callbackUrl: "/" });
+    await signIn(
+      "microsoft-entra-id",
+      { callbackUrl: "/" },
+      {
+        prompt: "consent",
+        scope: "openid profile email offline_access User.Read User.Read.All"
+      }
+    );
   }
 
   return (

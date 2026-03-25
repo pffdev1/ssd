@@ -22,6 +22,9 @@ interface CreateRequestInput {
   requestTypeCode: string;
   requesterName: string;
   requesterEmail: string;
+  requesterManagerEmail?: string;
+  requesterManagerName?: string;
+  requesterManagerTitle?: string;
   department: string;
   beneficiaryName?: string;
   subject: string;
@@ -632,10 +635,44 @@ async function getScopedApprover(scope: string, roleCode: string, client: PoolCl
 
 async function resolveRequesterUnitApprover(input: {
   requesterEmail: string;
+  requesterManagerEmail?: string;
+  requesterManagerName?: string;
+  requesterManagerTitle?: string;
   department: string;
   roleCode: string;
   client: PoolClient;
 }) {
+  const normalizedRequesterEmail = normalizeEmail(input.requesterEmail);
+  const normalizedManagerEmail = input.requesterManagerEmail ? normalizeEmail(input.requesterManagerEmail) : null;
+
+  if (normalizedManagerEmail && normalizedManagerEmail !== normalizedRequesterEmail) {
+    const existingManager = await input.client.query<ApproverRecord>(
+      `select *
+       from approvers
+       where lower(email) = lower($1)
+       order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
+       limit 1`,
+      [normalizedManagerEmail]
+    );
+
+    if ((existingManager.rowCount ?? 0) > 0) {
+      return existingManager.rows[0];
+    }
+
+    return {
+      id: `graph-manager:${normalizedManagerEmail}`,
+      department: input.department,
+      org_unit_id: null,
+      scope: "REQUESTER_MANAGER",
+      role_code: input.roleCode,
+      full_name: input.requesterManagerName?.trim() || normalizedManagerEmail,
+      email: normalizedManagerEmail,
+      title: input.requesterManagerTitle?.trim() || "Jefatura inmediata",
+      assignment_role: "PRIMARY",
+      sort_order: 0
+    };
+  }
+
   const departmentUnit = await getOrgUnitByName(input.department, input.client);
   let currentUnitId: string | null = departmentUnit?.id ?? null;
 
@@ -675,6 +712,9 @@ async function buildStepAssignments(
   requestType: RequestTypeRecord,
   department: string,
   requesterEmail: string,
+  requesterManagerEmail: string | undefined,
+  requesterManagerName: string | undefined,
+  requesterManagerTitle: string | undefined,
   client: PoolClient
 ): Promise<StepAssignment[]> {
   const assignments: StepAssignment[] = [];
@@ -688,6 +728,9 @@ async function buildStepAssignments(
     } else if (template.routing === "requester_unit") {
       approver = await resolveRequesterUnitApprover({
         requesterEmail,
+        requesterManagerEmail,
+        requesterManagerName,
+        requesterManagerTitle,
         department,
         roleCode: template.code,
         client
@@ -755,7 +798,15 @@ export async function createRequest(input: CreateRequestInput) {
     const requestType = await getRequestTypeByCode(input.requestTypeCode, client);
     const normalizedPayload = normalizeRequestPayload(input.requestTypeCode, input.payload);
     const ticketCode = await createTicketCode(client);
-    const steps = await buildStepAssignments(requestType, normalizedDepartment, input.requesterEmail, client);
+    const steps = await buildStepAssignments(
+      requestType,
+      normalizedDepartment,
+      input.requesterEmail,
+      input.requesterManagerEmail,
+      input.requesterManagerName,
+      input.requesterManagerTitle,
+      client
+    );
     const initialStatus = normalizeStatusFromStep(steps[0]);
 
     const requestResult = await client.query<{ id: string; ticket_code: string }>(

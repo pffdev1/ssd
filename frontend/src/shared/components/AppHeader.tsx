@@ -260,6 +260,7 @@ export function AppHeader({
                   <div className="mb-2 px-3 pt-2 text-xs uppercase tracking-[0.24em] text-[#0b5ed7]">Tu cuenta</div>
                   <div className="space-y-1">
                     <Link
+                      prefetch={false}
                       href="/perfil"
                       className={`block rounded-2xl px-3 py-3 text-sm transition ${
                         resolvedActiveItem === "profile" ? "bg-[#e9f2ff] font-semibold text-[#0b5ed7]" : "text-[#1e3a5f] hover:bg-[#eaf6ff]"
@@ -269,6 +270,7 @@ export function AppHeader({
                     </Link>
                     {isAdmin ? (
                       <Link
+                        prefetch={false}
                         href="/admin"
                         className={`block rounded-2xl px-3 py-3 text-sm transition ${
                           resolvedActiveItem === "admin" ? "bg-[#e9f2ff] font-semibold text-[#0b5ed7]" : "text-[#1e3a5f] hover:bg-[#eaf6ff]"
@@ -300,7 +302,7 @@ export function AppHeader({
 
         <div className="relative">
           <nav className="flex w-full flex-nowrap items-center gap-2 overflow-x-auto pb-1 lg:overflow-visible [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Link href="/" className={navClass("home")}>
+            <Link prefetch={false} href="/" className={navClass("home")}>
               <HomeIcon />
               Home
             </Link>
@@ -318,6 +320,7 @@ export function AppHeader({
                   <div className="space-y-1">
                     {visibleRequestTypes.map((type) => (
                       <Link
+                        prefetch={false}
                         key={type.code}
                         href={buildCatalogHref(type.code)}
                         className="block rounded-2xl px-3 py-3 text-sm text-[#1e3a5f] transition hover:bg-[#eaf6ff] hover:text-[#001534]"
@@ -330,12 +333,12 @@ export function AppHeader({
               ) : null}
             </div>
 
-            <Link href="/mis-solicitudes" className={navClass("my-requests")}>
+            <Link prefetch={false} href="/mis-solicitudes" className={navClass("my-requests")}>
               <TicketIcon />
               Mis solicitudes
             </Link>
 
-            <Link href="/inbox" className={navClass("inbox")}>
+            <Link prefetch={false} href="/inbox" className={navClass("inbox")}>
               <InboxIcon />
               Bandeja {inboxCount > 0 ? `(${inboxCount})` : ""}
             </Link>

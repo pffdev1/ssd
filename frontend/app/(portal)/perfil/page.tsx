@@ -5,6 +5,10 @@ import { AppHeader } from "@/src/shared/components/AppHeader";
 import { checkAdmin, getApproverInbox, getApproverProfile, getCatalog, getUserRoles } from "@/src/shared/lib/api";
 import { buildCurrentUser } from "@/src/shared/lib/user";
 
+function displayValue(value?: string | null) {
+  return value && value.trim() ? value : "No disponible";
+}
+
 export default async function ProfilePage() {
   const session = await auth();
 
@@ -20,7 +24,19 @@ export default async function ProfilePage() {
     getApproverInbox(session.user.email)
   ]);
 
-  const currentUser = buildCurrentUser(session.user.name, session.user.email, adminCheck.isAdmin, approverProfiles, userRoles);
+  const currentUser = buildCurrentUser(session.user.name, session.user.email, adminCheck.isAdmin, approverProfiles, userRoles, {
+    companyName: session.user.companyName,
+    department: session.user.department,
+    jobTitle: session.user.jobTitle,
+    employeeId: session.user.employeeId,
+    employeeType: session.user.employeeType,
+    employeeHireDate: session.user.employeeHireDate,
+    officeLocation: session.user.officeLocation,
+    managerEmail: session.user.managerEmail,
+    managerName: session.user.managerName,
+    managerTitle: session.user.managerTitle,
+    sponsors: session.user.sponsors
+  });
   const visibleTypes = catalog.requestTypes.filter(
     (type) => !["PERSONNEL_REQUEST", "TERMINATION_REQUEST"].includes(type.code) || currentUser.canManagePeopleFlows
   );
@@ -62,6 +78,35 @@ export default async function ProfilePage() {
         </div>
 
         <div className="rounded-[2rem] border border-slate-200 bg-white p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
+          <div className="text-xs uppercase tracking-[0.24em] text-[#8e1730]">Informacion del trabajo</div>
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Puesto</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{displayValue(currentUser.jobTitle)}</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Unidad de negocio</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{displayValue(currentUser.companyName)}</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Departamento</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{displayValue(currentUser.department)}</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Ubicacion</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">{displayValue(currentUser.officeLocation)}</div>
+            </div>
+            <div className="rounded-[1.4rem] border border-slate-200 bg-slate-50 p-4 md:col-span-2">
+              <div className="text-xs uppercase tracking-[0.2em] text-slate-500">Jefe/Supervisor Directo</div>
+              <div className="mt-2 text-sm font-semibold text-slate-900">
+                {currentUser.managerName || currentUser.managerEmail
+                  ? `${currentUser.managerName ?? "Jefatura directa"}${currentUser.managerEmail ? ` | ${currentUser.managerEmail}` : ""}`
+                  : "No disponible"}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-8 border-t border-slate-200 pt-8">
           <div className="text-xs uppercase tracking-[0.24em] text-[#8e1730]">Roles detectados</div>
           <div className="mt-5 flex flex-wrap gap-2">
             {(currentUser.roleLabels ?? ["Colaborador"]).map((role) => (
@@ -89,6 +134,7 @@ export default async function ProfilePage() {
                 ))
               )}
             </div>
+          </div>
           </div>
         </div>
       </section>
