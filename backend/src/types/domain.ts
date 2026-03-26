@@ -18,7 +18,7 @@ export interface WorkflowStepTemplate {
   code: string;
   label: string;
   kind: StepKind;
-  routing: "department" | "scope" | "requester_unit";
+  routing: "department" | "scope";
   scope?: string;
 }
 
@@ -53,41 +53,19 @@ export interface WorkflowStepTemplateRecord {
   label: string;
   description: string;
   kind: StepKind;
-  routing: "department" | "scope" | "requester_unit";
+  routing: "department" | "scope";
   scope: string | null;
   sort_order: number;
   active: boolean;
   created_at: string;
-}
-
-export interface OrgUnitRecord {
-  id: string;
-  name: string;
-  unit_type: string;
-  parent_id: string | null;
-  sort_order: number;
-  active: boolean;
-  created_at: string;
-}
-
-export interface EmployeeProfileRecord {
-  id: string;
-  full_name: string;
-  email: string | null;
-  title: string;
-  org_unit_id: string | null;
-  reports_to_profile_id: string | null;
-  sort_order: number;
-  active: boolean;
-  created_at: string;
-  org_unit_name?: string | null;
-  reports_to_name?: string | null;
+  responsible_name?: string | null;
+  responsible_email?: string | null;
+  responsible_title?: string | null;
 }
 
 export interface ApproverRecord {
   id: string;
   department: string | null;
-  org_unit_id: string | null;
   scope: string;
   role_code: string;
   full_name: string;

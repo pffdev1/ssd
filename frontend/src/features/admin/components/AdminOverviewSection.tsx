@@ -52,7 +52,7 @@ export function AdminOverviewSection({
         <div className="text-xs uppercase tracking-[0.24em] text-[#1f406b]">Centro de administracion</div>
         <h2 className="mt-3 text-3xl font-semibold text-[#001534]">Control operativo de SSD</h2>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-[#1e3a5f]">
-          Usa este panel para mantener el organigrama, los responsables, los workflows, los catalogos y la administracion general desde un solo punto.
+          Usa este panel para mantener catalogos, workflows, pasos de aprobacion y administracion general desde un solo punto.
         </p>
       </div>
 
@@ -60,16 +60,16 @@ export function AdminOverviewSection({
         <OverviewCard
           label="Responsables"
           value={String(routeCount)}
-          detail={`SSD tiene ${routeCount} rutas operativas configuradas y ahora se gestionan directamente desde Departamentos.`}
-          actionLabel="Ver departamentos"
-          onAction={() => onNavigate("departments")}
+          detail={`SSD tiene ${routeCount} rutas operativas configuradas y se alimentan desde catalogos y pasos.`}
+          actionLabel="Ver workflows"
+          onAction={() => onNavigate("workflows")}
         />
         <OverviewCard
           label="Departamentos"
           value={String(departmentCount)}
-          detail={`Hay ${departmentCount} departamentos oficiales publicados en el organigrama operativo con sus responsables asociados.`}
-          actionLabel="Ver organigrama"
-          onAction={() => onNavigate("departments")}
+          detail={`Hay ${departmentCount} departamentos oficiales activos en catalogos, listos para crecer a nuevas unidades de negocio.`}
+          actionLabel="Ir a Catalogos"
+          onAction={() => onNavigate("catalogs")}
         />
         <OverviewCard
           label="Catalogos"

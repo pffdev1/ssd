@@ -6,8 +6,6 @@ import {
   AdminUserRecord,
   ApproverRecord,
   CatalogItemRecord,
-  EmployeeProfileRecord,
-  OrgUnitRecord,
   PendingApprovalItem,
   RequestDetailRecord,
   RequestEventRecord,
@@ -58,16 +56,6 @@ const mutableFieldCatalogMap: Record<string, Record<string, string>> = {
 type WorkflowStepTemplateSeed = Omit<WorkflowStepTemplateRecord, "id" | "created_at">;
 
 const defaultWorkflowStepTemplates: WorkflowStepTemplateSeed[] = [
-  {
-    code: "IMMEDIATE_LEAD",
-    label: "Aprobacion de Jefatura Inmediata",
-    description: "Deriva la solicitud al supervisor o jefatura principal del departamento seleccionado.",
-    kind: "approval",
-    routing: "requester_unit",
-    scope: null,
-    sort_order: 5,
-    active: true
-  },
   {
     code: "AREA_MANAGER",
     label: "Aprobacion de Gerencia de Area",
@@ -367,132 +355,6 @@ async function getActiveCatalogItems(catalogKey?: string, client?: PoolClient) {
   return result.rows;
 }
 
-async function getOrgUnits(client?: PoolClient, activeOnly = true) {
-  const sql = `select *
-     from org_units
-     ${activeOnly ? "where active = true" : ""}
-     order by sort_order asc, name asc`;
-
-  if (client) {
-    const result = await client.query<OrgUnitRecord>(sql);
-    return result.rows;
-  }
-
-  const result = await query<OrgUnitRecord>(sql);
-  return result.rows;
-}
-
-async function getDepartmentOrgUnits(client?: PoolClient) {
-  const sql = `select *
-     from org_units
-     where active = true
-       and unit_type = 'departamento'
-     order by sort_order asc, name asc`;
-
-  if (client) {
-    const result = await client.query<OrgUnitRecord>(sql);
-    return result.rows;
-  }
-
-  const result = await query<OrgUnitRecord>(sql);
-  return result.rows;
-}
-
-async function getEmployeeProfiles(client?: PoolClient, activeOnly = true) {
-  const sql = `select
-      employee_profiles.*,
-      units.name as org_unit_name,
-      supervisor.full_name as reports_to_name
-    from employee_profiles
-    left join org_units units on units.id = employee_profiles.org_unit_id
-    left join employee_profiles supervisor on supervisor.id = employee_profiles.reports_to_profile_id
-    ${activeOnly ? "where employee_profiles.active = true" : ""}
-    order by employee_profiles.sort_order asc, employee_profiles.full_name asc`;
-
-  if (client) {
-    const result = await client.query<EmployeeProfileRecord>(sql);
-    return result.rows;
-  }
-
-  const result = await query<EmployeeProfileRecord>(sql);
-  return result.rows;
-}
-
-async function getEmployeeProfileByEmail(email: string, client?: PoolClient) {
-  if (!email.trim()) {
-    return null;
-  }
-
-  const sql = `select
-      employee_profiles.*,
-      units.name as org_unit_name,
-      supervisor.full_name as reports_to_name
-    from employee_profiles
-    left join org_units units on units.id = employee_profiles.org_unit_id
-    left join employee_profiles supervisor on supervisor.id = employee_profiles.reports_to_profile_id
-    where employee_profiles.active = true
-      and lower(employee_profiles.email) = lower($1)
-    limit 1`;
-
-  if (client) {
-    const result = await client.query<EmployeeProfileRecord>(sql, [normalizeEmail(email)]);
-    return result.rows[0] ?? null;
-  }
-
-  const result = await query<EmployeeProfileRecord>(sql, [normalizeEmail(email)]);
-  return result.rows[0] ?? null;
-}
-
-async function getEmployeeProfileById(id: string, client?: PoolClient) {
-  const sql = `select
-      employee_profiles.*,
-      units.name as org_unit_name,
-      supervisor.full_name as reports_to_name
-    from employee_profiles
-    left join org_units units on units.id = employee_profiles.org_unit_id
-    left join employee_profiles supervisor on supervisor.id = employee_profiles.reports_to_profile_id
-    where employee_profiles.id = $1
-    limit 1`;
-
-  if (client) {
-    const result = await client.query<EmployeeProfileRecord>(sql, [id]);
-    return result.rows[0] ?? null;
-  }
-
-  const result = await query<EmployeeProfileRecord>(sql, [id]);
-  return result.rows[0] ?? null;
-}
-
-async function getOrgUnitById(id: string, client?: PoolClient) {
-  const sql = `select *
-     from org_units
-     where id = $1
-     limit 1`;
-
-  if (client) {
-    const result = await client.query<OrgUnitRecord>(sql, [id]);
-    return result.rows[0] ?? null;
-  }
-
-  const result = await query<OrgUnitRecord>(sql, [id]);
-  return result.rows[0] ?? null;
-}
-
-async function getOrgUnitByName(name: string, client?: PoolClient) {
-  const sql = `select *
-     from org_units
-     where name = $1
-     limit 1`;
-
-  if (client) {
-    const result = await client.query<OrgUnitRecord>(sql, [name.trim()]);
-    return result.rows[0] ?? null;
-  }
-
-  const result = await query<OrgUnitRecord>(sql, [name.trim()]);
-  return result.rows[0] ?? null;
-}
-
 async function demotePrimaryApproversInGroup(
   client: PoolClient,
   scope: string,
@@ -517,6 +379,62 @@ async function demotePrimaryApproversInGroup(
        ${exceptClause}`,
     params
   );
+}
+
+async function hasBackupInGroup(
+  client: PoolClient,
+  scope: string,
+  roleCode: string,
+  department: string | null,
+  exceptId?: string
+) {
+  const params: unknown[] = [scope, roleCode, department];
+  const exceptClause = exceptId ? "and id <> $4" : "";
+
+  if (exceptId) {
+    params.push(exceptId);
+  }
+
+  const result = await client.query<{ total: string }>(
+    `select count(*)::text as total
+     from approvers
+     where scope = $1
+       and role_code = $2
+       and coalesce(department, '') = coalesce($3, '')
+       and assignment_role = 'BACKUP'
+       ${exceptClause}`,
+    params
+  );
+
+  return Number(result.rows[0]?.total ?? "0") > 0;
+}
+
+async function hasPrimaryInGroup(
+  client: PoolClient,
+  scope: string,
+  roleCode: string,
+  department: string | null,
+  exceptId?: string
+) {
+  const params: unknown[] = [scope, roleCode, department];
+  const exceptClause = exceptId ? "and id <> $4" : "";
+
+  if (exceptId) {
+    params.push(exceptId);
+  }
+
+  const result = await client.query<{ total: string }>(
+    `select count(*)::text as total
+     from approvers
+     where scope = $1
+       and role_code = $2
+       and coalesce(department, '') = coalesce($3, '')
+       and assignment_role = 'PRIMARY'
+       ${exceptClause}`,
+    params
+  );
+
+  return Number(result.rows[0]?.total ?? "0") > 0;
 }
 
 async function assertRequesterCanCreate(requestTypeCode: string, requesterEmail: string) {
@@ -601,20 +519,6 @@ async function getApproverByDepartment(department: string, roleCode: string, cli
   return result.rows[0];
 }
 
-async function getApproverByOrgUnit(orgUnitId: string, roleCode: string, client: PoolClient): Promise<ApproverRecord | null> {
-  const result = await client.query<ApproverRecord>(
-    `select *
-     from approvers
-     where org_unit_id = $1
-       and role_code = $2
-     order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
-     limit 1`,
-    [orgUnitId, roleCode]
-  );
-
-  return result.rows[0] ?? null;
-}
-
 async function getScopedApprover(scope: string, roleCode: string, client: PoolClient): Promise<ApproverRecord> {
   const result = await client.query<ApproverRecord>(
     `select *
@@ -633,79 +537,50 @@ async function getScopedApprover(scope: string, roleCode: string, client: PoolCl
   return result.rows[0];
 }
 
-async function resolveRequesterUnitApprover(input: {
+async function getGlobalStepApprover(roleCode: string, client: PoolClient): Promise<ApproverRecord | null> {
+  const result = await client.query<ApproverRecord>(
+    `select *
+     from approvers
+     where scope = 'AREA'
+       and role_code = $1
+       and department is null
+     order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
+     limit 1`,
+    [roleCode]
+  );
+
+  return result.rows[0] ?? null;
+}
+
+function buildDefaultManagerStepAssignment(input: {
   requesterEmail: string;
   requesterManagerEmail?: string;
   requesterManagerName?: string;
   requesterManagerTitle?: string;
   department: string;
-  roleCode: string;
-  client: PoolClient;
-}) {
+}): StepAssignment | null {
   const normalizedRequesterEmail = normalizeEmail(input.requesterEmail);
   const normalizedManagerEmail = input.requesterManagerEmail ? normalizeEmail(input.requesterManagerEmail) : null;
 
-  if (normalizedManagerEmail && normalizedManagerEmail !== normalizedRequesterEmail) {
-    const existingManager = await input.client.query<ApproverRecord>(
-      `select *
-       from approvers
-       where lower(email) = lower($1)
-       order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
-       limit 1`,
-      [normalizedManagerEmail]
-    );
+  if (!normalizedManagerEmail || normalizedManagerEmail === normalizedRequesterEmail) {
+    return null;
+  }
 
-    if ((existingManager.rowCount ?? 0) > 0) {
-      return existingManager.rows[0];
-    }
-
-    return {
-      id: `graph-manager:${normalizedManagerEmail}`,
-      department: input.department,
-      org_unit_id: null,
+  return {
+    sequence: 1,
+    label: "Aprobacion de Jefatura Inmediata",
+    roleCode: "IMMEDIATE_LEAD",
+    kind: "approval",
+    approverName: input.requesterManagerName?.trim() || normalizedManagerEmail,
+    approverEmail: normalizedManagerEmail,
+    department: input.department,
+    status: "pending",
+    metadata: {
       scope: "REQUESTER_MANAGER",
-      role_code: input.roleCode,
-      full_name: input.requesterManagerName?.trim() || normalizedManagerEmail,
-      email: normalizedManagerEmail,
       title: input.requesterManagerTitle?.trim() || "Jefatura inmediata",
-      assignment_role: "PRIMARY",
-      sort_order: 0
-    };
-  }
-
-  const departmentUnit = await getOrgUnitByName(input.department, input.client);
-  let currentUnitId: string | null = departmentUnit?.id ?? null;
-
-  while (currentUnitId) {
-    const approver = await getApproverByOrgUnit(currentUnitId, input.roleCode, input.client);
-
-    if (approver && normalizeEmail(approver.email) !== normalizeEmail(input.requesterEmail)) {
-      return approver;
+      source: "microsoft_entra_manager"
     }
-
-    const currentUnit = await getOrgUnitById(currentUnitId, input.client);
-    currentUnitId = currentUnit?.parent_id ?? null;
-  }
-
-  const departmentFallback = await input.client.query<ApproverRecord>(
-    `select *
-     from approvers
-     where department = $1
-       and role_code = $2
-     order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
-     limit 1`,
-    [input.department, input.roleCode]
-  );
-
-  if ((departmentFallback.rowCount ?? 0) > 0) {
-    const approver = departmentFallback.rows[0];
-
-    if (normalizeEmail(approver.email) !== normalizeEmail(input.requesterEmail)) {
-      return approver;
-    }
-  }
-
-  return null;
+  };
 }
 
 async function buildStepAssignments(
@@ -719,22 +594,33 @@ async function buildStepAssignments(
 ): Promise<StepAssignment[]> {
   const assignments: StepAssignment[] = [];
 
+  const managerStep = buildDefaultManagerStepAssignment({
+    requesterEmail,
+    requesterManagerEmail,
+    requesterManagerName,
+    requesterManagerTitle,
+    department
+  });
+
+  if (managerStep) {
+    assignments.push(managerStep);
+  }
+
   for (let index = 0; index < requestType.workflow.steps.length; index += 1) {
     const template = requestType.workflow.steps[index];
+
+    if (template.code === "IMMEDIATE_LEAD") {
+      continue;
+    }
+
     let approver: ApproverRecord | null;
 
     if (template.routing === "department") {
-      approver = await getApproverByDepartment(department, template.code, client);
-    } else if (template.routing === "requester_unit") {
-      approver = await resolveRequesterUnitApprover({
-        requesterEmail,
-        requesterManagerEmail,
-        requesterManagerName,
-        requesterManagerTitle,
-        department,
-        roleCode: template.code,
-        client
-      });
+      try {
+        approver = await getApproverByDepartment(department, template.code, client);
+      } catch {
+        approver = await getGlobalStepApprover(template.code, client);
+      }
     } else {
       approver = await getScopedApprover(template.scope ?? template.code, template.code, client);
     }
@@ -770,7 +656,9 @@ async function buildStepAssignments(
   }
 
   if (assignments.length === 0) {
-    throw new Error("No se pudo resolver ningun aprobador para este workflow. Revisa el organigrama y sus responsables.");
+    throw new Error(
+      "No se pudo resolver ningun aprobador para este workflow. Verifica que el usuario tenga manager en Entra o define pasos extra con responsables."
+    );
   }
 
   return assignments;
@@ -925,13 +813,16 @@ export async function createWorkflowStepTemplate(input: {
   label: string;
   description: string;
   kind: "approval" | "fulfillment";
-  routing: "department" | "scope" | "requester_unit";
+  routing: "department" | "scope";
   scope?: string | null;
   sortOrder?: number;
+  responsibleName?: string;
+  responsibleEmail?: string;
+  responsibleTitle?: string;
 }) {
   const normalizedCode = normalizeWorkflowStepCode(input.code);
   const allowedKinds = new Set(["approval", "fulfillment"]);
-  const allowedRoutings = new Set(["department", "scope", "requester_unit"]);
+  const allowedRoutings = new Set(["department", "scope"]);
 
   if (!normalizedCode) {
     throw new Error("El codigo del paso es requerido");
@@ -949,31 +840,57 @@ export async function createWorkflowStepTemplate(input: {
   const normalizedKind = input.kind;
   const normalizedScope =
     normalizedRouting === "scope" ? (input.scope?.trim().toUpperCase() ? input.scope.trim().toUpperCase() : null) : null;
+  const hasResponsibleFields = [
+    input.responsibleName?.trim(),
+    input.responsibleEmail?.trim(),
+    input.responsibleTitle?.trim()
+  ].filter(Boolean).length;
 
   if (normalizedRouting === "scope" && !normalizedScope) {
     throw new Error("Debes indicar un scope para los pasos por alcance");
   }
 
-  const result = await query<WorkflowStepTemplateRecord>(
-    `insert into workflow_step_templates (code, label, description, kind, routing, scope, sort_order, active)
-     values ($1, $2, $3, $4, $5, $6, $7, true)
-     returning *`,
-    [
-      normalizedCode,
-      input.label.trim(),
-      input.description.trim(),
-      normalizedKind,
-      normalizedRouting,
-      normalizedScope,
-      input.sortOrder ?? 999
-    ]
-  );
+  if (hasResponsibleFields > 0 && hasResponsibleFields < 3) {
+    throw new Error("Para asignar responsable del paso debes completar nombre, correo y cargo.");
+  }
 
-  return result.rows[0];
+  return withTransaction(async (client) => {
+    const result = await client.query<WorkflowStepTemplateRecord>(
+      `insert into workflow_step_templates (code, label, description, kind, routing, scope, sort_order, active)
+       values ($1, $2, $3, $4, $5, $6, $7, true)
+       returning *`,
+      [
+        normalizedCode,
+        input.label.trim(),
+        input.description.trim(),
+        normalizedKind,
+        normalizedRouting,
+        normalizedScope,
+        input.sortOrder ?? 999
+      ]
+    );
+
+    const created = result.rows[0];
+    const hasResponsible =
+      Boolean(input.responsibleName?.trim()) && Boolean(input.responsibleEmail?.trim()) && Boolean(input.responsibleTitle?.trim());
+
+    if (hasResponsible) {
+      await upsertWorkflowStepResponsible(client, created, {
+        fullName: input.responsibleName!.trim(),
+        email: input.responsibleEmail!.trim(),
+        title: input.responsibleTitle!.trim()
+      });
+    }
+
+    const refreshed = await getWorkflowStepTemplates(client, true);
+    return refreshed.find((step) => step.id === created.id) ?? created;
+  });
 }
 
 async function buildWorkflowDefinition(stepCodes: string[], client?: PoolClient) {
-  const normalizedCodes = stepCodes.map((code) => code.trim().toUpperCase()).filter(Boolean);
+  const normalizedCodes = stepCodes
+    .map((code) => code.trim().toUpperCase())
+    .filter((code) => Boolean(code) && code !== "IMMEDIATE_LEAD");
 
   if (normalizedCodes.length === 0) {
     throw new Error("Debes mantener al menos un paso en el workflow");
@@ -1008,6 +925,10 @@ async function buildWorkflowDefinition(stepCodes: string[], client?: PoolClient)
     };
   });
 
+  if (steps.length === 0) {
+    throw new Error("Debes mantener al menos un paso adicional al de jefatura inmediata");
+  }
+
   return {
     steps,
     requiresGeneralManagement: normalizedCodes.includes("GG_APPROVAL")
@@ -1032,7 +953,7 @@ export async function createRequestType(input: {
   }
 
   const activeTemplates = await getWorkflowStepTemplates(undefined, false);
-  const defaultStepCodes = ["IMMEDIATE_LEAD", "AREA_MANAGER"].filter((code) =>
+  const defaultStepCodes = ["AREA_MANAGER"].filter((code) =>
     activeTemplates.some((template) => template.code === code)
   );
   const effectiveDefaultStepCodes = defaultStepCodes.length > 0 ? defaultStepCodes : activeTemplates.slice(0, 1).map((template) => template.code);
@@ -1142,7 +1063,16 @@ export async function updateRequestTypeWorkflow(input: { id: string; stepCodes: 
 export async function listApprovers() {
   const result = await query<ApproverRecord>(
     `select *
-     from approvers
+     from (
+       select
+         approvers.*,
+         row_number() over (
+           partition by coalesce(department, ''), scope, role_code
+           order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, full_name asc
+         ) as rank_in_group
+       from approvers
+     ) grouped
+     where rank_in_group <= 2
      order by coalesce(department, scope), role_code asc, case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, full_name asc`
   );
 
@@ -1150,12 +1080,26 @@ export async function listApprovers() {
 }
 
 async function getWorkflowStepTemplates(client?: PoolClient, includeInactive = true) {
-  await ensureDefaultWorkflowStepTemplates(client);
-
-  const sql = `select *
-     from workflow_step_templates
-     ${includeInactive ? "" : "where active = true"}
-     order by sort_order asc, label asc`;
+  const sql = `select
+      wst.*,
+      apr.full_name as responsible_name,
+      apr.email as responsible_email,
+      apr.title as responsible_title
+     from workflow_step_templates wst
+     left join lateral (
+       select full_name, email, title
+       from approvers
+       where role_code = wst.code
+         and department is null
+         and scope = case
+           when wst.routing = 'scope' then coalesce(wst.scope, wst.code)
+           else 'AREA'
+         end
+       order by case when assignment_role = 'PRIMARY' then 0 else 1 end asc, sort_order asc, created_at asc
+       limit 1
+     ) apr on true
+     ${includeInactive ? "" : "where wst.active = true"}
+     order by wst.sort_order asc, wst.label asc`;
 
   if (client) {
     const result = await client.query<WorkflowStepTemplateRecord>(sql);
@@ -1541,26 +1485,18 @@ export async function getDashboardData(actorEmail?: string) {
 }
 
 export async function getDepartments() {
-  const orgDepartments = await getDepartmentOrgUnits();
-
-  if (orgDepartments.length > 0) {
-    return orgDepartments.map((item) => item.name);
-  }
-
   const catalogDepartments = await getActiveCatalogItems("DEPARTMENT");
-
-  if (catalogDepartments.length > 0) {
-    return catalogDepartments.map((item) => item.item_value);
-  }
-
   const result = await query<{ department: string }>(
     `select distinct department
      from approvers
      where department is not null
      order by department asc`
   );
-
-  return result.rows.map((row: { department: string }) => row.department);
+  const catalogValues = catalogDepartments.map((item) => item.item_value.trim()).filter(Boolean);
+  const approverValues = result.rows.map((row: { department: string }) => row.department.trim()).filter(Boolean);
+  const merged = Array.from(new Set([...catalogValues, ...approverValues]));
+  merged.sort((a, b) => a.localeCompare(b, "es", { sensitivity: "base" }));
+  return merged;
 }
 
 export async function listPendingApprovals(approverEmail: string) {
@@ -1671,16 +1607,51 @@ export async function listCatalogItems() {
   return getActiveCatalogItems();
 }
 
-export async function listOrgUnits() {
-  return getOrgUnits(undefined, true);
+async function upsertWorkflowStepResponsible(
+  client: PoolClient,
+  step: Pick<WorkflowStepTemplateRecord, "code" | "routing" | "scope">,
+  input: {
+    fullName: string;
+    email: string;
+    title: string;
+  }
+) {
+  const normalizedScope = step.routing === "scope" ? (step.scope ?? step.code) : "AREA";
+  const normalizedRoleCode = step.code.trim().toUpperCase();
+  const normalizedEmail = normalizeEmail(input.email);
+
+  await client.query(
+    `delete from approvers
+     where scope = $1
+       and role_code = $2
+       and department is null`,
+    [normalizedScope, normalizedRoleCode]
+  );
+
+  await client.query(
+    `insert into approvers (department, scope, role_code, full_name, email, title, assignment_role, sort_order)
+     values (null, $1, $2, $3, $4, $5, 'PRIMARY', 10)
+     on conflict ((coalesce(department, '')), scope, role_code, lower(email)) do update
+       set full_name = excluded.full_name,
+           title = excluded.title,
+           assignment_role = 'PRIMARY',
+           sort_order = 10`,
+    [normalizedScope, normalizedRoleCode, input.fullName.trim(), normalizedEmail, input.title.trim()]
+  );
 }
 
-export async function listEmployeeProfiles() {
-  return getEmployeeProfiles(undefined, true);
-}
-
-export async function getEmployeeDirectoryProfile(email: string) {
-  return getEmployeeProfileByEmail(email);
+async function clearWorkflowStepResponsible(
+  client: PoolClient,
+  step: Pick<WorkflowStepTemplateRecord, "code" | "routing" | "scope">
+) {
+  const normalizedScope = step.routing === "scope" ? (step.scope ?? step.code) : "AREA";
+  await client.query(
+    `delete from approvers
+     where scope = $1
+       and role_code = $2
+       and department is null`,
+    [normalizedScope, step.code]
+  );
 }
 
 export async function updateWorkflowStepTemplate(input: {
@@ -1689,43 +1660,108 @@ export async function updateWorkflowStepTemplate(input: {
   description: string;
   active: boolean;
   sortOrder: number;
+  responsibleName?: string;
+  responsibleEmail?: string;
+  responsibleTitle?: string;
+  clearResponsible?: boolean;
 }) {
-  const result = await query<WorkflowStepTemplateRecord>(
-    `update workflow_step_templates
-     set label = $2,
-         description = $3,
-         active = $4,
-         sort_order = $5
-     where id = $1
-     returning *`,
-    [input.id, input.label.trim(), input.description.trim(), input.active, input.sortOrder]
-  );
+  return withTransaction(async (client) => {
+    const result = await client.query<WorkflowStepTemplateRecord>(
+      `update workflow_step_templates
+       set label = $2,
+           description = $3,
+           active = $4,
+           sort_order = $5
+       where id = $1
+       returning *`,
+      [input.id, input.label.trim(), input.description.trim(), input.active, input.sortOrder]
+    );
 
-  if (result.rowCount === 0) {
-    throw new Error("Paso no encontrado");
-  }
+    if (result.rowCount === 0) {
+      throw new Error("Paso no encontrado");
+    }
 
-  return result.rows[0];
+    const step = result.rows[0];
+
+    const requestTypesResult = await client.query<{ id: string; workflow: RequestTypeRecord["workflow"] }>(
+      `select id, workflow
+       from request_types
+       where exists (
+         select 1
+         from jsonb_array_elements(workflow -> 'steps') step_json
+         where step_json ->> 'code' = $1
+       )`,
+      [step.code]
+    );
+
+    for (const requestType of requestTypesResult.rows) {
+      const currentSteps = Array.isArray(requestType.workflow?.steps) ? requestType.workflow.steps : [];
+      const nextSteps = currentSteps.map((workflowStep) =>
+        workflowStep.code === step.code
+          ? {
+              ...workflowStep,
+              label: input.label.trim()
+            }
+          : workflowStep
+      );
+
+      await client.query(
+        `update request_types
+         set workflow = $2::jsonb
+         where id = $1`,
+        [
+          requestType.id,
+          JSON.stringify({
+            steps: nextSteps
+          })
+        ]
+      );
+    }
+    const hasResponsibleFields = [
+      input.responsibleName?.trim(),
+      input.responsibleEmail?.trim(),
+      input.responsibleTitle?.trim()
+    ].filter(Boolean).length;
+    const hasResponsible =
+      Boolean(input.responsibleName?.trim()) && Boolean(input.responsibleEmail?.trim()) && Boolean(input.responsibleTitle?.trim());
+
+    if (!input.clearResponsible && hasResponsibleFields > 0 && hasResponsibleFields < 3) {
+      throw new Error("Para asignar responsable del paso debes completar nombre, correo y cargo.");
+    }
+
+    if (input.clearResponsible) {
+      await clearWorkflowStepResponsible(client, step);
+    } else if (hasResponsible) {
+      await upsertWorkflowStepResponsible(client, step, {
+        fullName: input.responsibleName!.trim(),
+        email: input.responsibleEmail!.trim(),
+        title: input.responsibleTitle!.trim()
+      });
+    }
+
+    const refreshed = await getWorkflowStepTemplates(client, true);
+    return refreshed.find((current) => current.id === step.id) ?? step;
+  });
 }
 
 export async function removeWorkflowStepTemplate(id: string) {
-  const currentResult = await query<WorkflowStepTemplateRecord>(
-    `select *
-     from workflow_step_templates
-     where id = $1
-     limit 1`,
-    [id]
-  );
+  await withTransaction(async (client) => {
+    const currentResult = await client.query<WorkflowStepTemplateRecord>(
+      `select *
+       from workflow_step_templates
+       where id = $1
+       limit 1`,
+      [id]
+    );
 
-  if (currentResult.rowCount === 0) {
-    throw new Error("Paso no encontrado");
-  }
+    if (currentResult.rowCount === 0) {
+      throw new Error("Paso no encontrado");
+    }
 
-  const current = currentResult.rows[0];
+    const current = currentResult.rows[0];
 
-  const [workflowUsage, approverUsage] = await Promise.all([
-    query<{ total: string }>(
-      `select count(*)::text as total
+    const requestTypesResult = await client.query<{ id: string; code: string; workflow: RequestTypeRecord["workflow"] }>(
+      `select id, code, workflow
        from request_types
        where exists (
          select 1
@@ -1733,25 +1769,42 @@ export async function removeWorkflowStepTemplate(id: string) {
          where step ->> 'code' = $1
        )`,
       [current.code]
-    ),
-    query<{ total: string }>(
-      `select count(*)::text as total
-       from approvers
-       where role_code = $1`,
-      [current.code]
-    )
-  ]);
+    );
 
-  if (Number(workflowUsage.rows[0]?.total ?? "0") > 0 || Number(approverUsage.rows[0]?.total ?? "0") > 0) {
-    throw new Error("Primero debes quitar este paso de los workflows y de la matriz de aprobadores");
-  }
+    for (const requestType of requestTypesResult.rows) {
+      const existingSteps = Array.isArray(requestType.workflow?.steps) ? requestType.workflow.steps : [];
+      const filteredSteps = existingSteps.filter((step) => step.code !== current.code);
 
-  await query(`delete from workflow_step_templates where id = $1`, [id]);
+      if (filteredSteps.length === 0) {
+        throw new Error(
+          `No se puede eliminar ${current.code} porque el workflow ${requestType.code} quedaria sin pasos. Agrega otro paso antes de eliminarlo.`
+        );
+      }
+
+      const requiresGeneralManagement = filteredSteps.some((step) => step.code === "GG_APPROVAL");
+
+      await client.query(
+        `update request_types
+         set workflow = $2::jsonb,
+             requires_general_management = $3
+         where id = $1`,
+        [
+          requestType.id,
+          JSON.stringify({
+            steps: filteredSteps
+          }),
+          requiresGeneralManagement
+        ]
+      );
+    }
+
+    await client.query(`delete from approvers where role_code = $1`, [current.code]);
+    await client.query(`delete from workflow_step_templates where id = $1`, [id]);
+  });
 }
 
 export async function addApprover(input: {
   department: string | null;
-  orgUnitId?: string | null;
   scope: string;
   roleCode: string;
   fullName: string;
@@ -1760,7 +1813,6 @@ export async function addApprover(input: {
   assignmentRole?: string;
 }) {
   const normalizedDepartment = input.department?.trim() ? input.department.trim() : null;
-  const normalizedOrgUnitId = input.orgUnitId?.trim() ? input.orgUnitId.trim() : null;
   const normalizedScope = input.scope.trim().toUpperCase();
   const normalizedRoleCode = input.roleCode.trim().toUpperCase();
   const normalizedEmail = normalizeEmail(input.email);
@@ -1776,46 +1828,35 @@ export async function addApprover(input: {
       [normalizedScope, normalizedRoleCode, normalizedDepartment]
     );
 
-      const orgUnitResult = normalizedOrgUnitId
-        ? await client.query<OrgUnitRecord>(
-            `select *
-             from org_units
-             where id = $1
-             limit 1`,
-            [normalizedOrgUnitId]
-          )
-        : normalizedDepartment !== null
-          ? await client.query<OrgUnitRecord>(
-              `select *
-               from org_units
-               where name = $1
-               limit 1`,
-              [normalizedDepartment]
-            )
-          : { rows: [] as OrgUnitRecord[] };
-
-      if (normalizedOrgUnitId && orgUnitResult.rows.length === 0) {
-        throw new Error("La unidad organizacional indicada no existe");
-      }
-
       if (assignmentRole === "PRIMARY") {
+        const hasExistingPrimary = await hasPrimaryInGroup(client, normalizedScope, normalizedRoleCode, normalizedDepartment);
+        const hasExistingBackup = await hasBackupInGroup(client, normalizedScope, normalizedRoleCode, normalizedDepartment);
+
+        if (hasExistingPrimary && hasExistingBackup) {
+          throw new Error("Esta ruta ya tiene principal y respaldo. Edita uno existente en lugar de agregar un tercero.");
+        }
+
         await demotePrimaryApproversInGroup(client, normalizedScope, normalizedRoleCode, normalizedDepartment);
+      } else {
+        const hasExistingBackup = await hasBackupInGroup(client, normalizedScope, normalizedRoleCode, normalizedDepartment);
+
+        if (hasExistingBackup) {
+          throw new Error("Solo se permite un respaldo por ruta.");
+        }
       }
 
     const nextSortOrder = Number(currentMax.rows[0]?.max_sort ?? "0") + 10;
 
     const result = await client.query<ApproverRecord>(
-      `insert into approvers (department, org_unit_id, scope, role_code, full_name, email, title, assignment_role, sort_order)
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      `insert into approvers (department, scope, role_code, full_name, email, title, assignment_role, sort_order)
+       values ($1, $2, $3, $4, $5, $6, $7, $8)
        on conflict ((coalesce(department, '')), scope, role_code, lower(email)) do update
          set full_name = excluded.full_name,
              title = excluded.title,
-             org_unit_id = excluded.org_unit_id,
              assignment_role = excluded.assignment_role
        returning *`,
       [
         normalizedDepartment,
-        orgUnitResult.rows[0]?.id ?? null,
         normalizedScope,
         normalizedRoleCode,
         input.fullName.trim(),
@@ -1900,7 +1941,20 @@ export async function updateApprover(input: {
     const assignmentRole = normalizeAssignmentRole(input.assignmentRole ?? current.assignment_role);
 
     if (assignmentRole === "PRIMARY") {
+      const hasExistingBackup = await hasBackupInGroup(client, current.scope, current.role_code, current.department, current.id);
+      const hasExistingPrimary = await hasPrimaryInGroup(client, current.scope, current.role_code, current.department, current.id);
+
+      if (hasExistingPrimary && hasExistingBackup) {
+        throw new Error("Esta ruta ya tiene principal y respaldo. Edita uno existente en lugar de agregar un tercero.");
+      }
+
       await demotePrimaryApproversInGroup(client, current.scope, current.role_code, current.department, current.id);
+    } else {
+      const hasExistingBackup = await hasBackupInGroup(client, current.scope, current.role_code, current.department, current.id);
+
+      if (hasExistingBackup) {
+        throw new Error("Solo se permite un respaldo por ruta.");
+      }
     }
 
     const result = await client.query<ApproverRecord>(
@@ -1936,7 +1990,20 @@ export async function setApproverAssignmentRole(input: { id: string; assignmentR
     const nextRole = normalizeAssignmentRole(input.assignmentRole);
 
     if (nextRole === "PRIMARY") {
+      const hasExistingBackup = await hasBackupInGroup(client, current.scope, current.role_code, current.department, current.id);
+      const hasExistingPrimary = await hasPrimaryInGroup(client, current.scope, current.role_code, current.department, current.id);
+
+      if (hasExistingPrimary && hasExistingBackup) {
+        throw new Error("Esta ruta ya tiene principal y respaldo. Edita uno existente en lugar de agregar un tercero.");
+      }
+
       await demotePrimaryApproversInGroup(client, current.scope, current.role_code, current.department, current.id);
+    } else {
+      const hasExistingBackup = await hasBackupInGroup(client, current.scope, current.role_code, current.department, current.id);
+
+      if (hasExistingBackup) {
+        throw new Error("Solo se permite un respaldo por ruta.");
+      }
     }
 
     const result = await client.query<ApproverRecord>(
@@ -2144,195 +2211,6 @@ export async function updateCatalogItem(input: {
 
   if (result.rowCount === 0) {
     throw new Error("Catalogo no encontrado");
-  }
-
-  return result.rows[0];
-}
-
-export async function addOrgUnit(input: {
-  name: string;
-  unitType: string;
-  parentId?: string | null;
-  sortOrder?: number;
-}) {
-  const result = await query<OrgUnitRecord>(
-    `insert into org_units (name, unit_type, parent_id, sort_order, active)
-     values ($1, $2, $3, $4, true)
-     on conflict (name) do update
-       set unit_type = excluded.unit_type,
-           parent_id = excluded.parent_id,
-           sort_order = excluded.sort_order,
-           active = true
-     returning *`,
-    [input.name.trim(), input.unitType.trim().toLowerCase(), input.parentId ?? null, input.sortOrder ?? 999]
-  );
-
-  return result.rows[0];
-}
-
-export async function updateOrgUnit(input: {
-  id: string;
-  name: string;
-  unitType: string;
-  parentId?: string | null;
-  sortOrder?: number;
-}) {
-  if (input.parentId === input.id) {
-    throw new Error("Una unidad no puede ser su propio padre");
-  }
-
-  const result = await query<OrgUnitRecord>(
-    `update org_units
-     set name = $2,
-         unit_type = $3,
-         parent_id = $4,
-         sort_order = $5,
-         active = true
-     where id = $1
-     returning *`,
-    [input.id, input.name.trim(), input.unitType.trim().toLowerCase(), input.parentId ?? null, input.sortOrder ?? 999]
-  );
-
-  if (result.rowCount === 0) {
-    throw new Error("Unidad organizacional no encontrada");
-  }
-
-  await query(
-    `update approvers
-     set department = $2
-     where org_unit_id = $1`,
-    [input.id, input.name.trim()]
-  );
-
-  return result.rows[0];
-}
-
-export async function addEmployeeProfile(input: {
-  fullName: string;
-  email?: string | null;
-  title: string;
-  orgUnitId: string;
-  reportsToProfileId?: string | null;
-  sortOrder?: number;
-}) {
-  const orgUnit = await getOrgUnitById(input.orgUnitId);
-
-  if (!orgUnit) {
-    throw new Error("La unidad organizacional indicada no existe");
-  }
-
-  if (input.reportsToProfileId) {
-    const supervisor = await query<EmployeeProfileRecord>(
-      `select *
-       from employee_profiles
-       where id = $1
-       limit 1`,
-      [input.reportsToProfileId]
-    );
-
-    if (supervisor.rowCount === 0) {
-      throw new Error("El supervisor indicado no existe");
-    }
-  }
-
-  const normalizedEmail = input.email?.trim() ? normalizeEmail(input.email) : null;
-  const result = await query<EmployeeProfileRecord>(
-    `insert into employee_profiles (full_name, email, title, org_unit_id, reports_to_profile_id, sort_order, active)
-     values ($1, $2, $3, $4, $5, $6, true)
-     returning *`,
-    [
-      input.fullName.trim(),
-      normalizedEmail,
-      input.title.trim(),
-      input.orgUnitId,
-      input.reportsToProfileId ?? null,
-      input.sortOrder ?? 999
-    ]
-  );
-
-  return result.rows[0];
-}
-
-export async function updateEmployeeProfile(input: {
-  id: string;
-  fullName: string;
-  email?: string | null;
-  title: string;
-  orgUnitId: string;
-  reportsToProfileId?: string | null;
-  sortOrder?: number;
-}) {
-  if (input.reportsToProfileId === input.id) {
-    throw new Error("Un colaborador no puede reportarse a si mismo");
-  }
-
-  const orgUnit = await getOrgUnitById(input.orgUnitId);
-
-  if (!orgUnit) {
-    throw new Error("La unidad organizacional indicada no existe");
-  }
-
-  if (input.reportsToProfileId) {
-    const supervisor = await query<EmployeeProfileRecord>(
-      `select *
-       from employee_profiles
-       where id = $1
-       limit 1`,
-      [input.reportsToProfileId]
-    );
-
-    if (supervisor.rowCount === 0) {
-      throw new Error("El supervisor indicado no existe");
-    }
-  }
-
-  const normalizedEmail = input.email?.trim() ? normalizeEmail(input.email) : null;
-  const result = await query<EmployeeProfileRecord>(
-    `update employee_profiles
-     set full_name = $2,
-         email = $3,
-         title = $4,
-         org_unit_id = $5,
-         reports_to_profile_id = $6,
-         sort_order = $7,
-         active = true
-     where id = $1
-     returning *`,
-    [
-      input.id,
-      input.fullName.trim(),
-      normalizedEmail,
-      input.title.trim(),
-      input.orgUnitId,
-      input.reportsToProfileId ?? null,
-      input.sortOrder ?? 999
-    ]
-  );
-
-  if (result.rowCount === 0) {
-    throw new Error("Colaborador no encontrado");
-  }
-
-  return result.rows[0];
-}
-
-export async function removeEmployeeProfile(id: string) {
-  await query(
-    `update employee_profiles
-     set reports_to_profile_id = null
-     where reports_to_profile_id = $1`,
-    [id]
-  );
-
-  const result = await query<EmployeeProfileRecord>(
-    `delete from employee_profiles
-     where id = $1
-     returning *`,
-    [id]
-  );
-
-  if (result.rowCount === 0) {
-    throw new Error("Colaborador no encontrado");
   }
 
   return result.rows[0];

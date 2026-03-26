@@ -23,8 +23,7 @@ export function MicrosoftEntraLoginButton({ disabled = false }: { disabled?: boo
       "microsoft-entra-id",
       { callbackUrl: "/" },
       {
-        prompt: "consent",
-        scope: "openid profile email offline_access User.Read User.Read.All"
+        prompt: "consent"
       }
     );
   }

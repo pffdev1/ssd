@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { adminFetch, readAdminPayload } from "@/src/features/admin/lib/apiClient";
 import { formatDateTimePanama } from "@/src/shared/lib/datetime";
 import { runWithToast } from "@/src/shared/lib/toast";
 import { AdminUser, AppUser } from "@/src/shared/lib/types";
@@ -31,7 +32,7 @@ export function AdminUsersSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admins`, {
+          const response = await adminFetch("/admins", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -43,7 +44,7 @@ export function AdminUsersSection({
             })
           });
 
-          const payload = (await response.json()) as { message?: string; admins?: AdminUser[] };
+          const payload = await readAdminPayload<{ message?: string; admins?: AdminUser[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo registrar el administrador");

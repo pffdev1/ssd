@@ -4,6 +4,7 @@ import { env } from "./config/env";
 import { dashboardRouter } from "./routes/dashboard";
 import { catalogRouter } from "./routes/catalog";
 import { requestsRouter } from "./routes/requests";
+import { buildOpenApiDocument, renderSwaggerHtml } from "./openapi";
 
 const app = express();
 
@@ -31,6 +32,14 @@ app.get("/health", (_req, res) => {
     ok: true,
     service: "ssd-backend"
   });
+});
+
+app.get("/api/openapi.json", (req, res) => {
+  res.json(buildOpenApiDocument(req));
+});
+
+app.get("/api/docs", (_req, res) => {
+  res.type("html").send(renderSwaggerHtml("/api/openapi.json"));
 });
 
 app.use("/api", catalogRouter);

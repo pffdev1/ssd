@@ -5,8 +5,6 @@ import {
   CatalogItem,
   CatalogResponse,
   DashboardResponse,
-  EmployeeProfile,
-  OrgUnit,
   PendingApprovalItem,
   RequestDetail,
   RequestItem,
@@ -100,16 +98,4 @@ export async function getAdminApprovers(actorEmail: string) {
 
 export async function getWorkflowSteps(actorEmail: string) {
   return fetchJson<WorkflowStepTemplate[]>(`/admin/workflow-steps?actorEmail=${encodeURIComponent(actorEmail)}`);
-}
-
-export async function getOrgUnits(actorEmail: string) {
-  return fetchJson<OrgUnit[]>(`/admin/org-units?actorEmail=${encodeURIComponent(actorEmail)}`);
-}
-
-export async function getEmployeeProfiles(actorEmail: string) {
-  return fetchJson<EmployeeProfile[]>(`/admin/employee-profiles?actorEmail=${encodeURIComponent(actorEmail)}`);
-}
-
-export async function getEmployeeDirectoryProfile(email: string) {
-  return fetchJson<EmployeeProfile | null>(`/employees/profile?email=${encodeURIComponent(email)}`);
 }

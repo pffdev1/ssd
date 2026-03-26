@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { adminFetch, readAdminPayload } from "@/src/features/admin/lib/apiClient";
 import { runWithToast } from "@/src/shared/lib/toast";
 import { AppUser, RequestType, WorkflowStepTemplate } from "@/src/shared/lib/types";
 
@@ -10,7 +11,7 @@ function StepBadge({
   scope
 }: {
   kind: "approval" | "fulfillment";
-  routing: "department" | "scope" | "requester_unit";
+  routing: "department" | "scope";
   scope?: string;
 }) {
   return (
@@ -19,7 +20,7 @@ function StepBadge({
         {kind === "approval" ? "Aprobacion" : "Ejecucion"}
       </span>
       <span className="rounded-full border border-[#d7e4f2] bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#1e3a5f]">
-        {routing === "department" ? "Por departamento" : routing === "requester_unit" ? "Supervisor del departamento" : scope ?? "Scope"}
+        {routing === "department" ? "Por departamento" : scope ?? "Scope"}
       </span>
     </div>
   );
@@ -113,21 +114,18 @@ export function WorkflowSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${selectedRequestType.id}/workflow`,
-            {
-              method: "PATCH",
-              headers: {
-                "Content-Type": "application/json"
-              },
-              body: JSON.stringify({
-                actorEmail: currentUser.email,
-                stepCodes: draftStepCodes
-              })
-            }
-          );
+          const response = await adminFetch(`/admin/request-types/${selectedRequestType.id}/workflow`, {
+            method: "PATCH",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body: JSON.stringify({
+              actorEmail: currentUser.email,
+              stepCodes: draftStepCodes
+            })
+          });
 
-          const payload = (await response.json()) as { message?: string; requestTypes?: RequestType[] };
+          const payload = await readAdminPayload<{ message?: string; requestTypes?: RequestType[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo actualizar el workflow");

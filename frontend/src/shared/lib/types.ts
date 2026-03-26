@@ -25,7 +25,7 @@ export interface RequestType {
       code: string;
       label: string;
       kind: "approval" | "fulfillment";
-      routing: "department" | "scope" | "requester_unit";
+      routing: "department" | "scope";
       scope?: string;
     }>;
   };
@@ -104,7 +104,6 @@ export interface AppUser {
 export interface ApproverProfile {
   id: string;
   department: string | null;
-  org_unit_id?: string | null;
   scope: string;
   role_code: string;
   full_name: string;
@@ -117,7 +116,6 @@ export interface ApproverProfile {
 export interface ApproverAssignment {
   id: string;
   department: string | null;
-  org_unit_id?: string | null;
   scope: string;
   role_code: string;
   full_name: string;
@@ -125,30 +123,6 @@ export interface ApproverAssignment {
   title: string;
   assignment_role?: "PRIMARY" | "BACKUP";
   sort_order: number;
-}
-
-export interface OrgUnit {
-  id: string;
-  name: string;
-  unit_type: "company" | "division" | "gerencia" | "jefatura" | "departamento";
-  parent_id: string | null;
-  sort_order: number;
-  active: boolean;
-  created_at: string;
-}
-
-export interface EmployeeProfile {
-  id: string;
-  full_name: string;
-  email: string | null;
-  title: string;
-  org_unit_id: string | null;
-  reports_to_profile_id: string | null;
-  reports_to_name?: string | null;
-  org_unit_name?: string | null;
-  sort_order: number;
-  active: boolean;
-  created_at: string;
 }
 
 export interface PendingApprovalItem extends RequestItem {
@@ -168,7 +142,6 @@ export interface CatalogResponse {
   approvers: Array<{
     id: string;
     department: string | null;
-    org_unit_id?: string | null;
     scope: string;
     role_code: string;
     full_name: string;
@@ -219,9 +192,12 @@ export interface WorkflowStepTemplate {
   label: string;
   description: string;
   kind: "approval" | "fulfillment";
-  routing: "department" | "scope" | "requester_unit";
+  routing: "department" | "scope";
   scope: string | null;
   sort_order: number;
   active: boolean;
   created_at: string;
+  responsible_name?: string | null;
+  responsible_email?: string | null;
+  responsible_title?: string | null;
 }

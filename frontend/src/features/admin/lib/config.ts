@@ -2,7 +2,7 @@
 
 import { ApproverAssignment, RequestType, WorkflowStepTemplate } from "@/src/shared/lib/types";
 
-export type AdminSectionId = "overview" | "departments" | "steps" | "workflows" | "catalogs" | "admins" | "mobile";
+export type AdminSectionId = "overview" | "steps" | "workflows" | "catalogs" | "admins" | "mobile";
 
 export type ApprovalRouteBlueprint = {
   key: string;
@@ -23,11 +23,6 @@ export const adminSections: Array<{
     id: "overview",
     label: "Resumen",
     description: "Vista general del modelo"
-  },
-  {
-    id: "departments",
-    label: "Departamentos",
-    description: "Organigrama y responsables"
   },
   {
     id: "steps",
@@ -103,23 +98,7 @@ export function buildApprovalRoutes(departments: string[], stepTemplates: Workfl
       summary: template.description
     }));
 
-  const hierarchyRoutes: ApprovalRouteBlueprint[] = orderedTemplates
-    .filter((template) => template.routing === "requester_unit")
-    .map((template) => ({
-      key: getRouteKey({
-        department: null,
-        roleCode: template.code,
-        scope: "ORG_UNIT"
-      }),
-      heading: template.label,
-      roleCode: template.code,
-      roleLabel: template.label,
-      scope: "ORG_UNIT",
-      department: null,
-      summary: template.description
-    }));
-
-  return [...departmentRoutes, ...scopeRoutes, ...hierarchyRoutes];
+  return [...departmentRoutes, ...scopeRoutes];
 }
 
 export function getApproverGroupHeading(
@@ -138,10 +117,6 @@ function routeParticipatesInStep(route: ApprovalRouteBlueprint, requestType: Req
 
     if (route.department) {
       return step.routing === "department";
-    }
-
-    if (route.scope === "ORG_UNIT") {
-      return step.routing === "requester_unit";
     }
 
     if (step.routing !== "scope") {

@@ -7,6 +7,7 @@ import {
   getRequestTypesForRoute,
   type ApprovalRouteBlueprint
 } from "@/src/features/admin/lib/config";
+import { adminFetch, readAdminPayload } from "@/src/features/admin/lib/apiClient";
 import { runWithToast } from "@/src/shared/lib/toast";
 import { AppUser, ApproverAssignment, RequestType, WorkflowStepTemplate } from "@/src/shared/lib/types";
 
@@ -181,10 +182,8 @@ export function ApprovalsSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const endpoint = editingApproverId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${editingApproverId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers`;
-          const response = await fetch(endpoint, {
+          const path = editingApproverId ? `/admin/approvers/${editingApproverId}` : "/admin/approvers";
+          const response = await adminFetch(path, {
             method: editingApproverId ? "PATCH" : "POST",
             headers: {
               "Content-Type": "application/json"
@@ -201,7 +200,7 @@ export function ApprovalsSection({
             })
           });
 
-          const payload = (await response.json()) as { message?: string; approvers?: ApproverAssignment[] };
+          const payload = await readAdminPayload<{ message?: string; approvers?: ApproverAssignment[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo registrar el aprobador");
@@ -233,7 +232,7 @@ export function ApprovalsSection({
   async function moveApprover(id: string, direction: "up" | "down") {
     const data = await runWithToast(
       (async () => {
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/move`, {
+        const response = await adminFetch(`/admin/approvers/${id}/move`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -244,7 +243,7 @@ export function ApprovalsSection({
           })
         });
 
-        const payload = (await response.json()) as { message?: string; approvers?: ApproverAssignment[] };
+        const payload = await readAdminPayload<{ message?: string; approvers?: ApproverAssignment[] }>(response);
 
         if (!response.ok) {
           throw new Error(payload.message ?? "No se pudo reordenar");
@@ -265,14 +264,11 @@ export function ApprovalsSection({
   async function removeApprover(id: string) {
     const data = await runWithToast(
       (async () => {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
-          {
-            method: "DELETE"
-          }
-        );
+        const response = await adminFetch(`/admin/approvers/${id}?actorEmail=${encodeURIComponent(currentUser.email)}`, {
+          method: "DELETE"
+        });
 
-        const payload = (await response.json()) as { message?: string; approvers?: ApproverAssignment[] };
+        const payload = await readAdminPayload<{ message?: string; approvers?: ApproverAssignment[] }>(response);
 
         if (!response.ok) {
           throw new Error(payload.message ?? "No se pudo eliminar");
@@ -293,21 +289,18 @@ export function ApprovalsSection({
   async function setRoleAssignment(id: string, nextAssignmentRole: "PRIMARY" | "BACKUP") {
     const data = await runWithToast(
       (async () => {
-        const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/approvers/${id}/assignment-role`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              actorEmail: currentUser.email,
-              assignmentRole: nextAssignmentRole
-            })
-          }
-        );
+        const response = await adminFetch(`/admin/approvers/${id}/assignment-role`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            actorEmail: currentUser.email,
+            assignmentRole: nextAssignmentRole
+          })
+        });
 
-        const payload = (await response.json()) as { message?: string; approvers?: ApproverAssignment[] };
+        const payload = await readAdminPayload<{ message?: string; approvers?: ApproverAssignment[] }>(response);
 
         if (!response.ok) {
           throw new Error(payload.message ?? "No se pudo actualizar el responsable");

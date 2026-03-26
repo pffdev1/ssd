@@ -23,7 +23,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"HR_REVIEW","label":"Validación de Recursos Humanos","kind":"approval","routing":"scope","scope":"HR"},
       {"code":"GG_APPROVAL","label":"Autorización de Gerencia General","kind":"approval","routing":"scope","scope":"GG"}
@@ -45,7 +44,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"HR_REVIEW","label":"Registro y validación RRHH","kind":"approval","routing":"scope","scope":"HR"}
     ]
@@ -66,7 +64,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"HR_REVIEW","label":"Validación legal y laboral RRHH","kind":"approval","routing":"scope","scope":"HR"},
       {"code":"GG_APPROVAL","label":"Autorización de Gerencia General","kind":"approval","routing":"scope","scope":"GG"},
@@ -89,7 +86,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"FINANCE_REVIEW","label":"Validación financiera","kind":"approval","routing":"scope","scope":"FINANCE"},
       {"code":"GG_APPROVAL","label":"Autorización de Gerencia General","kind":"approval","routing":"scope","scope":"GG"},
@@ -112,7 +108,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"IT_REVIEW","label":"Validación técnica TI","kind":"approval","routing":"scope","scope":"IT"},
       {"code":"FINANCE_REVIEW","label":"Revisión presupuestaria","kind":"approval","routing":"scope","scope":"FINANCE"},
@@ -136,7 +131,6 @@ values
   ]'::jsonb,
   '{
     "steps":[
-      {"code":"IMMEDIATE_LEAD","label":"Aprobación de Jefatura Inmediata","kind":"approval","routing":"requester_unit"},
       {"code":"AREA_MANAGER","label":"Aprobación de Gerencia de Área","kind":"approval","routing":"department"},
       {"code":"GG_APPROVAL","label":"Autorización de Gerencia General","kind":"approval","routing":"scope","scope":"GG"},
       {"code":"IT_DELIVERY","label":"Carta responsiva y entrega TI","kind":"fulfillment","routing":"scope","scope":"IT"}
@@ -146,59 +140,9 @@ values
 )
 on conflict (code) do nothing;
 
-insert into org_units (name, unit_type, parent_id, sort_order, active)
-values
-('Pedersen Fine Foods', 'company', null, 10, true)
-on conflict (name) do update
-set unit_type = excluded.unit_type,
-    parent_id = excluded.parent_id,
-    sort_order = excluded.sort_order,
-    active = excluded.active;
-
-insert into org_units (name, unit_type, parent_id, sort_order, active)
-select 'Corporativo', 'division', root.id, 10, true
-from org_units root
-where root.name = 'Pedersen Fine Foods'
-on conflict (name) do update
-set unit_type = excluded.unit_type,
-    parent_id = excluded.parent_id,
-    sort_order = excluded.sort_order,
-    active = excluded.active;
-
-insert into org_units (name, unit_type, parent_id, sort_order, active)
-select 'Comercial y Operacion', 'division', root.id, 20, true
-from org_units root
-where root.name = 'Pedersen Fine Foods'
-on conflict (name) do update
-set unit_type = excluded.unit_type,
-    parent_id = excluded.parent_id,
-    sort_order = excluded.sort_order,
-    active = excluded.active;
-
-insert into org_units (name, unit_type, parent_id, sort_order, active)
-select branch.name, branch.unit_type, parent.id, branch.sort_order, true
-from (
-  values
-    ('Gerencia General', 'gerencia', 'Pedersen Fine Foods', 10),
-    ('Finanzas / Contabilidad', 'departamento', 'Corporativo', 20),
-    ('Recursos Humanos', 'departamento', 'Corporativo', 30),
-    ('Proyectos / IT', 'departamento', 'Corporativo', 40),
-    ('Operaciones', 'departamento', 'Comercial y Operacion', 50),
-    ('Ventas / Mercadeo', 'departamento', 'Comercial y Operacion', 60),
-    ('Food Service', 'departamento', 'Comercial y Operacion', 70),
-    ('Retail', 'departamento', 'Comercial y Operacion', 80)
-) as branch(name, unit_type, parent_name, sort_order)
-inner join org_units parent on parent.name = branch.parent_name
-on conflict (name) do update
-set unit_type = excluded.unit_type,
-    parent_id = excluded.parent_id,
-    sort_order = excluded.sort_order,
-    active = excluded.active;
-
-insert into approvers (department, org_unit_id, scope, role_code, full_name, email, title, assignment_role, sort_order)
+insert into approvers (department, scope, role_code, full_name, email, title, assignment_role, sort_order)
 select
   source.department,
-  org.id,
   source.scope,
   source.role_code,
   source.full_name,
@@ -224,7 +168,6 @@ from (
     (null, 'IT', 'IT_DELIVERY', 'Mesa de Ayuda IT', 'mesadeayuda@pffsa.com', 'Soporte y Entrega TI', 'PRIMARY', 20),
     (null, 'PROCUREMENT', 'PROCUREMENT', 'Compras Corporativas', 'compras@pffsa.com', 'Compras Locales', 'PRIMARY', 10)
 ) as source(department, scope, role_code, full_name, email, title, assignment_role, sort_order)
-left join org_units org on org.name = source.department
 on conflict do nothing;
 
 insert into admin_users (full_name, email, created_by_email)
@@ -261,7 +204,6 @@ on conflict (catalog_key, item_value) do nothing;
 
 insert into workflow_step_templates (code, label, description, kind, routing, scope, sort_order, active)
 values
-('IMMEDIATE_LEAD', 'Aprobacion de Jefatura Inmediata', 'Deriva la solicitud al supervisor o jefatura principal del departamento seleccionado.', 'approval', 'requester_unit', null, 5, true),
 ('AREA_MANAGER', 'Aprobacion de Gerencia de Area', 'Deriva la solicitud al responsable del departamento seleccionado.', 'approval', 'department', null, 10, true),
 ('HR_REVIEW', 'Revision y validacion RRHH', 'Validacion laboral, documental y de politica interna.', 'approval', 'scope', 'HR', 20, true),
 ('FINANCE_REVIEW', 'Revision presupuestaria', 'Control financiero y disponibilidad presupuestaria.', 'approval', 'scope', 'FINANCE', 30, true),

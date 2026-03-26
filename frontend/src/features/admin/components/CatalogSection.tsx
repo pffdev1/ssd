@@ -12,6 +12,18 @@ const catalogViews = [
     description: "Tipos de solicitud disponibles en SSD."
   },
   {
+    key: "DEPARTMENT",
+    mode: "catalog",
+    label: "Departamentos",
+    description: "Catalogo maestro de departamentos para ruteo de solicitudes."
+  },
+  {
+    key: "BUSINESS_UNIT",
+    mode: "catalog",
+    label: "Unidades de negocio",
+    description: "Base para futuras unidades, divisiones o marcas de SSD."
+  },
+  {
     key: "MOBILE_PLAN",
     mode: "catalog",
     label: "Planes celulares",
@@ -80,6 +92,78 @@ export function CatalogSection({
   onItemsChange: (items: CatalogItem[]) => void;
   onRequestTypesChange: (requestTypes: RequestType[]) => void;
 }) {
+  const apiCandidates = useMemo(() => {
+    const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+    const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+    const protocol = typeof window !== "undefined" ? window.location.protocol.toLowerCase() : "http:";
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const values: string[] = [];
+
+    if (!isLocalHost) {
+      values.push("/api");
+    }
+
+    const configuredIsHttpOnHttpsPage =
+      Boolean(configured) && protocol === "https:" && configured?.toLowerCase().startsWith("http://");
+
+    if (configured && !configuredIsHttpOnHttpsPage) {
+      values.push(configured);
+    }
+
+    if (isLocalHost) {
+      values.push("/api");
+
+      if (!configured) {
+        values.push("http://localhost:4000/api");
+      }
+    }
+
+    if (!isLocalHost && protocol === "http:") {
+      values.push(`http://${host}:4000/api`);
+    }
+
+    return Array.from(new Set(values.filter(Boolean)));
+  }, []);
+
+  async function fetchApi(path: string, init: RequestInit) {
+    let last404Response: Response | null = null;
+    let lastError: unknown = null;
+
+    for (const base of apiCandidates) {
+      try {
+        const response = await fetch(`${base}${path}`, init);
+
+        if (response.status === 404) {
+          last404Response = response;
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (last404Response) {
+      return last404Response;
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("No se pudo contactar el API de SSD");
+  }
+
+  async function readPayload<T>(response: Response): Promise<T & { message?: string }> {
+    const raw = await response.text();
+
+    try {
+      return JSON.parse(raw) as T & { message?: string };
+    } catch {
+      const candidates = apiCandidates.length > 0 ? apiCandidates.join(", ") : "sin rutas candidatas";
+      return {
+        message: `Respuesta invalida del servidor (${response.status}). Verifica API/proxy. Rutas probadas: ${candidates}`
+      } as T & { message?: string };
+    }
+  }
+
   const [activeCatalogKey, setActiveCatalogKey] = useState<CatalogViewKey>("REQUEST_TYPES");
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [itemLabel, setItemLabel] = useState("");
@@ -132,9 +216,9 @@ export function CatalogSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingItemId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/catalog-items/${editingItemId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/catalog-items`;
-          const response = await fetch(endpoint, {
+            ? `/admin/catalog-items/${editingItemId}`
+            : "/admin/catalog-items";
+          const response = await fetchApi(endpoint, {
             method: editingItemId ? "PATCH" : "POST",
             headers: {
               "Content-Type": "application/json"
@@ -148,7 +232,7 @@ export function CatalogSection({
             })
           });
 
-          const payload = (await response.json()) as { message?: string; items?: CatalogItem[] };
+          const payload = await readPayload<{ items?: CatalogItem[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo actualizar el catalogo");
@@ -183,9 +267,9 @@ export function CatalogSection({
       const data = await runWithToast(
         (async () => {
           const endpoint = editingRequestTypeId
-            ? `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${editingRequestTypeId}`
-            : `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types`;
-          const response = await fetch(endpoint, {
+            ? `/admin/request-types/${editingRequestTypeId}`
+            : "/admin/request-types";
+          const response = await fetchApi(endpoint, {
             method: editingRequestTypeId ? "PATCH" : "POST",
             headers: {
               "Content-Type": "application/json"
@@ -200,7 +284,7 @@ export function CatalogSection({
             })
           });
 
-          const payload = (await response.json()) as { message?: string; requestTypes?: RequestType[] };
+          const payload = await readPayload<{ requestTypes?: RequestType[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo guardar el tipo de solicitud");
@@ -242,14 +326,14 @@ export function CatalogSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/request-types/${editingRequestTypeId}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+          const response = await fetchApi(
+            `/admin/request-types/${editingRequestTypeId}?actorEmail=${encodeURIComponent(currentUser.email)}`,
             {
               method: "DELETE"
             }
           );
 
-          const payload = (await response.json()) as { message?: string; requestTypes?: RequestType[] };
+          const payload = await readPayload<{ requestTypes?: RequestType[] }>(response);
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo eliminar el tipo de solicitud");

@@ -5,11 +5,10 @@ import { AdminOverviewSection } from "@/src/features/admin/components/AdminOverv
 import { AdminUsersSection } from "@/src/features/admin/components/AdminUsersSection";
 import { ApprovedLinesSection } from "@/src/features/admin/components/ApprovedLinesSection";
 import { CatalogSection } from "@/src/features/admin/components/CatalogSection";
-import { DepartmentOrgChartSection } from "@/src/features/admin/components/DepartmentOrgChartSection";
 import { WorkflowSection } from "@/src/features/admin/components/WorkflowSection";
 import { WorkflowStepsSection } from "@/src/features/admin/components/WorkflowStepsSection";
 import { adminSections, buildApprovalRoutes, type AdminSectionId } from "@/src/features/admin/lib/config";
-import { AdminUser, AppUser, ApproverAssignment, CatalogItem, EmployeeProfile, OrgUnit, RequestItem, RequestType, WorkflowStepTemplate } from "@/src/shared/lib/types";
+import { AdminUser, AppUser, CatalogItem, RequestItem, RequestType, WorkflowStepTemplate } from "@/src/shared/lib/types";
 
 function SectionIcon({ id }: { id: AdminSectionId }) {
   if (id === "overview") {
@@ -27,21 +26,6 @@ function SectionIcon({ id }: { id: AdminSectionId }) {
         <path d="M4 6h16" />
         <path d="M4 12h16" />
         <path d="M4 18h16" />
-      </svg>
-    );
-  }
-
-  if (id === "departments") {
-    return (
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-4 w-4">
-        <path d="M12 4v5" />
-        <path d="M5 10h14" />
-        <path d="M7 10v8" />
-        <path d="M12 10v8" />
-        <path d="M17 10v8" />
-        <path d="M4 18h6" />
-        <path d="M9 18h6" />
-        <path d="M14 18h6" />
       </svg>
     );
   }
@@ -94,9 +78,6 @@ export function AdminPanel({
   admins,
   approvedMobileLines,
   catalogItems,
-  approvers,
-  orgUnits,
-  employeeProfiles,
   requestTypes,
   stepTemplates
 }: {
@@ -104,27 +85,21 @@ export function AdminPanel({
   admins: AdminUser[];
   approvedMobileLines: RequestItem[];
   catalogItems: CatalogItem[];
-  approvers: ApproverAssignment[];
-  orgUnits: OrgUnit[];
-  employeeProfiles: EmployeeProfile[];
   requestTypes: RequestType[];
   stepTemplates: WorkflowStepTemplate[];
 }) {
   const [activeSection, setActiveSection] = useState<AdminSectionId>("overview");
   const [adminList, setAdminList] = useState(admins);
   const [catalogList, setCatalogList] = useState(catalogItems);
-  const [approverList, setApproverList] = useState(approvers);
-  const [orgUnitList, setOrgUnitList] = useState(orgUnits);
-  const [employeeProfileList, setEmployeeProfileList] = useState(employeeProfiles);
   const [requestTypeList, setRequestTypeList] = useState(requestTypes);
   const [stepTemplateList, setStepTemplateList] = useState(stepTemplates);
 
   const managedDepartments = useMemo(() => {
-    const orgDepartments = orgUnitList.filter((item) => item.unit_type === "departamento").map((item) => item.name);
-    const liveDepartments = approverList.map((item) => item.department).filter(Boolean) as string[];
-
-    return Array.from(new Set([...orgDepartments, ...liveDepartments])).sort((a, b) => a.localeCompare(b));
-  }, [approverList, orgUnitList]);
+    return catalogList
+      .filter((item) => item.catalog_key === "DEPARTMENT" && item.active)
+      .map((item) => item.item_value)
+      .sort((a, b) => a.localeCompare(b));
+  }, [catalogList]);
 
   const routeCount = useMemo(() => buildApprovalRoutes(managedDepartments, stepTemplateList).length, [managedDepartments, stepTemplateList]);
 
@@ -145,7 +120,7 @@ export function AdminPanel({
               {managedDepartments.length} departamentos
             </span>
             <span className="rounded-full border border-[#d7e4f2] bg-white px-4 py-2 text-xs uppercase tracking-[0.18em] text-[#1e3a5f]">
-              {approverList.length} responsables
+              {stepTemplateList.length} pasos
             </span>
           </div>
         </div>
@@ -186,25 +161,13 @@ export function AdminPanel({
         />
       ) : null}
 
-      {activeSection === "departments" ? (
-        <DepartmentOrgChartSection
-          currentUser={currentUser}
-          orgUnits={orgUnitList}
-          approvers={approverList}
-          employeeProfiles={employeeProfileList}
-          stepTemplates={stepTemplateList}
-          onApproversChange={setApproverList}
-          onEmployeeProfilesChange={setEmployeeProfileList}
-          onOrgUnitsChange={setOrgUnitList}
-        />
-      ) : null}
-
       {activeSection === "steps" ? (
         <WorkflowStepsSection
           currentUser={currentUser}
           requestTypes={requestTypeList}
           stepTemplates={stepTemplateList}
           onStepTemplatesChange={setStepTemplateList}
+          onRequestTypesChange={setRequestTypeList}
         />
       ) : null}
 

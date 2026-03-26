@@ -35,9 +35,16 @@ const rawIssuer =
 
 const issuer = rawIssuer ? rawIssuer.replace(/\/+$/, "") : undefined;
 
-const microsoftGraphScope =
+const baseMicrosoftScope =
   process.env.AUTH_MICROSOFT_GRAPH_SCOPE ??
   "openid profile email offline_access User.Read User.Read.All";
+
+const teamOrgChartScope = process.env.AUTH_TEAM_ORGCHART_SCOPE?.trim();
+const teamOrgChartApiUrl = process.env.TEAM_ORGCHART_API_URL?.trim();
+
+const microsoftScope = [baseMicrosoftScope, teamOrgChartScope]
+  .filter((value): value is string => Boolean(value))
+  .join(" ");
 
 type GraphProfile = {
   companyName?: string;
@@ -58,6 +65,16 @@ type GraphManager = {
 
 type GraphSponsorItem = {
   displayName?: string | null;
+};
+
+type TeamOrgChartProfile = {
+  managerEmail?: string;
+  managerName?: string;
+  managerTitle?: string;
+  department?: string;
+  jobTitle?: string;
+  officeLocation?: string;
+  companyName?: string;
 };
 
 async function fetchGraphProfile(accessToken: string): Promise<GraphProfile | null> {
@@ -133,6 +150,134 @@ async function fetchGraphSponsors(accessToken: string): Promise<string[]> {
   }
 }
 
+function readStringValue(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const value = payload[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value.trim();
+    }
+  }
+
+  return undefined;
+}
+
+function readNestedString(payload: Record<string, unknown>, keys: string[]) {
+  for (const key of keys) {
+    const nested = payload[key];
+
+    if (nested && typeof nested === "object") {
+      const nestedRecord = nested as Record<string, unknown>;
+      const value =
+        readStringValue(nestedRecord, ["email", "mail", "userPrincipalName", "upn"]) ??
+        readStringValue(nestedRecord, ["name", "displayName", "fullName", "title"]);
+
+      if (value) {
+        return value;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+function mapTeamOrgChartProfile(payload: Record<string, unknown>): TeamOrgChartProfile {
+  const managerName =
+    readStringValue(payload, ["managerName", "manager", "supervisorName", "leadName", "reportsToName"]) ??
+    readNestedString(payload, ["manager", "supervisor", "lead", "reportsTo"]);
+
+  const managerEmail =
+    readStringValue(payload, ["managerEmail", "supervisorEmail", "leadEmail", "reportsToEmail"]) ??
+    (payload.manager && typeof payload.manager === "object"
+      ? readStringValue(payload.manager as Record<string, unknown>, ["email", "mail", "userPrincipalName"])
+      : undefined);
+
+  return {
+    managerName,
+    managerEmail,
+    managerTitle: readStringValue(payload, ["managerTitle", "supervisorTitle", "leadTitle"]),
+    department: readStringValue(payload, ["department", "departmentName", "orgUnit", "organizationUnit"]),
+    jobTitle: readStringValue(payload, ["jobTitle", "title", "positionTitle"]),
+    officeLocation: readStringValue(payload, ["officeLocation", "location", "workLocation", "site"]),
+    companyName: readStringValue(payload, ["companyName", "businessUnit", "company", "organization"])
+  };
+}
+
+async function exchangeRefreshTokenForScope(input: {
+  refreshToken: string;
+  scope: string;
+}) {
+  const tenantId = process.env.AUTH_MICROSOFT_ENTRA_ID_TENANT_ID;
+  const clientId = process.env.AUTH_MICROSOFT_ENTRA_ID_ID;
+  const clientSecret = process.env.AUTH_MICROSOFT_ENTRA_ID_SECRET;
+
+  if (!tenantId || !clientId || !clientSecret) {
+    return null;
+  }
+
+  const response = await fetch(`https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: "refresh_token",
+      refresh_token: input.refreshToken,
+      scope: input.scope
+    }).toString(),
+    cache: "no-store"
+  });
+
+  if (!response.ok) {
+    console.warn("[auth][teamorgchart] token exchange failed", {
+      status: response.status,
+      statusText: response.statusText
+    });
+    return null;
+  }
+
+  const payload = (await response.json()) as {
+    access_token?: string;
+    refresh_token?: string;
+  };
+
+  return {
+    accessToken: payload.access_token,
+    refreshToken: payload.refresh_token
+  };
+}
+
+async function fetchTeamOrgChartProfile(accessToken: string): Promise<TeamOrgChartProfile | null> {
+  if (!teamOrgChartApiUrl) {
+    return null;
+  }
+
+  try {
+    const response = await fetch(teamOrgChartApiUrl, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
+      cache: "no-store"
+    });
+
+    if (!response.ok) {
+      console.warn("[auth][teamorgchart] profile lookup failed", {
+        status: response.status,
+        statusText: response.statusText
+      });
+      return null;
+    }
+
+    const payload = (await response.json()) as Record<string, unknown>;
+    return mapTeamOrgChartProfile(payload);
+  } catch {
+    console.warn("[auth][teamorgchart] profile lookup failed: network/runtime error");
+    return null;
+  }
+}
+
 const nextAuthInstance = NextAuth({
   secret: process.env.AUTH_SECRET,
   trustHost: true,
@@ -144,7 +289,7 @@ const nextAuthInstance = NextAuth({
           issuer,
           authorization: {
             params: {
-              scope: microsoftGraphScope
+              scope: microsoftScope
             }
           }
         })
@@ -155,8 +300,18 @@ const nextAuthInstance = NextAuth({
   },
   callbacks: {
     async jwt({ token, account, profile }) {
+      const tokenState = token as typeof token & {
+        microsoftRefreshToken?: string;
+        teamOrgChartSyncedAt?: number;
+      };
+
       if (account?.provider === "microsoft-entra-id" && account.access_token) {
         token.accessToken = account.access_token;
+
+        if (account.refresh_token) {
+          tokenState.microsoftRefreshToken = account.refresh_token;
+        }
+
         const graphProfile = await fetchGraphProfile(account.access_token);
 
         if (graphProfile) {
@@ -179,6 +334,39 @@ const nextAuthInstance = NextAuth({
 
         const sponsors = await fetchGraphSponsors(account.access_token);
         token.sponsors = sponsors;
+      }
+
+      if (teamOrgChartScope && teamOrgChartApiUrl && tokenState.microsoftRefreshToken) {
+        const now = Date.now();
+        const shouldRefreshTeamOrgChart =
+          !tokenState.teamOrgChartSyncedAt || now - tokenState.teamOrgChartSyncedAt > 15 * 60 * 1000;
+
+        if (shouldRefreshTeamOrgChart) {
+          const exchanged = await exchangeRefreshTokenForScope({
+            refreshToken: tokenState.microsoftRefreshToken,
+            scope: `${teamOrgChartScope} offline_access`
+          });
+
+          if (exchanged?.accessToken) {
+            if (exchanged.refreshToken) {
+              tokenState.microsoftRefreshToken = exchanged.refreshToken;
+            }
+
+            const teamProfile = await fetchTeamOrgChartProfile(exchanged.accessToken);
+
+            if (teamProfile) {
+              token.managerEmail = teamProfile.managerEmail ?? token.managerEmail;
+              token.managerName = teamProfile.managerName ?? token.managerName;
+              token.managerTitle = teamProfile.managerTitle ?? token.managerTitle;
+              token.department = teamProfile.department ?? token.department;
+              token.jobTitle = teamProfile.jobTitle ?? token.jobTitle;
+              token.officeLocation = teamProfile.officeLocation ?? token.officeLocation;
+              token.companyName = teamProfile.companyName ?? token.companyName;
+            }
+          }
+
+          tokenState.teamOrgChartSyncedAt = now;
+        }
       }
 
       if (profile && typeof profile === "object" && "roles" in profile && Array.isArray(profile.roles)) {

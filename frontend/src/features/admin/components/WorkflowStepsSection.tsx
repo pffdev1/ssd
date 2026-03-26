@@ -33,29 +33,109 @@ export function WorkflowStepsSection({
   currentUser,
   requestTypes,
   stepTemplates,
-  onStepTemplatesChange
+  onStepTemplatesChange,
+  onRequestTypesChange
 }: {
   currentUser: AppUser;
   requestTypes: RequestType[];
   stepTemplates: WorkflowStepTemplate[];
   onStepTemplatesChange: (steps: WorkflowStepTemplate[]) => void;
+  onRequestTypesChange: (requestTypes: RequestType[]) => void;
 }) {
   const orderedSteps = useMemo(
     () => [...stepTemplates].sort((left, right) => left.sort_order - right.sort_order || left.label.localeCompare(right.label)),
     [stepTemplates]
   );
+  const apiCandidates = useMemo(() => {
+    const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+    const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+    const protocol = typeof window !== "undefined" ? window.location.protocol.toLowerCase() : "http:";
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const values: string[] = [];
+
+    if (!isLocalHost) {
+      values.push("/api");
+    }
+
+    const configuredIsHttpOnHttpsPage =
+      Boolean(configured) && protocol === "https:" && configured?.toLowerCase().startsWith("http://");
+
+    if (configured && !configuredIsHttpOnHttpsPage) {
+      values.push(configured);
+    }
+
+    if (isLocalHost) {
+      values.push("/api");
+
+      if (!configured) {
+        values.push("http://localhost:4000/api");
+      }
+    }
+
+    if (!isLocalHost && protocol === "http:") {
+      values.push(`http://${host}:4000/api`);
+    }
+
+    return Array.from(new Set(values.filter(Boolean)));
+  }, []);
+
+  async function fetchApi(path: string, init: RequestInit) {
+    let last404Response: Response | null = null;
+    let lastError: unknown = null;
+
+    for (const base of apiCandidates) {
+      try {
+        const response = await fetch(`${base}${path}`, init);
+
+        if (response.status === 404) {
+          last404Response = response;
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (last404Response) {
+      return last404Response;
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("No se pudo contactar el API de SSD");
+  }
+
+  async function readPayload<T>(response: Response): Promise<T & { message?: string }> {
+    const raw = await response.text();
+
+    try {
+      return JSON.parse(raw) as T & { message?: string };
+    } catch {
+      const candidates = apiCandidates.length > 0 ? apiCandidates.join(", ") : "sin rutas candidatas";
+      return {
+        message: `Respuesta invalida del servidor (${response.status}). Verifica API/proxy. Rutas probadas: ${candidates}`
+      } as T & { message?: string };
+    }
+  }
+
   const [selectedStepId, setSelectedStepId] = useState(orderedSteps[0]?.id ?? "");
   const [label, setLabel] = useState("");
   const [description, setDescription] = useState("");
   const [active, setActive] = useState(true);
   const [sortOrder, setSortOrder] = useState("10");
+  const [responsibleName, setResponsibleName] = useState("");
+  const [responsibleEmail, setResponsibleEmail] = useState("");
+  const [responsibleTitle, setResponsibleTitle] = useState("");
   const [createCode, setCreateCode] = useState("");
   const [createLabel, setCreateLabel] = useState("");
   const [createDescription, setCreateDescription] = useState("");
   const [createKind, setCreateKind] = useState<"approval" | "fulfillment">("approval");
-  const [createRouting, setCreateRouting] = useState<"department" | "scope" | "requester_unit">("scope");
+  const [createRouting, setCreateRouting] = useState<"department" | "scope">("scope");
   const [createScope, setCreateScope] = useState("CUSTOM");
   const [createSortOrder, setCreateSortOrder] = useState("999");
+  const [createResponsibleName, setCreateResponsibleName] = useState("");
+  const [createResponsibleEmail, setCreateResponsibleEmail] = useState("");
+  const [createResponsibleTitle, setCreateResponsibleTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -77,6 +157,9 @@ export function WorkflowStepsSection({
       setDescription("");
       setActive(true);
       setSortOrder("10");
+      setResponsibleName("");
+      setResponsibleEmail("");
+      setResponsibleTitle("");
       return;
     }
 
@@ -84,6 +167,9 @@ export function WorkflowStepsSection({
     setDescription(selectedStep.description);
     setActive(selectedStep.active);
     setSortOrder(String(selectedStep.sort_order));
+    setResponsibleName(selectedStep.responsible_name ?? "");
+    setResponsibleEmail(selectedStep.responsible_email ?? "");
+    setResponsibleTitle(selectedStep.responsible_title ?? "");
     setMessage(null);
   }, [selectedStep?.id]);
 
@@ -100,7 +186,10 @@ export function WorkflowStepsSection({
     (label !== selectedStep.label ||
       description !== selectedStep.description ||
       active !== selectedStep.active ||
-      Number(sortOrder || 0) !== selectedStep.sort_order);
+      Number(sortOrder || 0) !== selectedStep.sort_order ||
+      responsibleName !== (selectedStep.responsible_name ?? "") ||
+      responsibleEmail !== (selectedStep.responsible_email ?? "") ||
+      responsibleTitle !== (selectedStep.responsible_title ?? ""));
 
   async function saveStep() {
     if (!selectedStep) {
@@ -113,8 +202,8 @@ export function WorkflowStepsSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps/${selectedStep.id}`,
+          const response = await fetchApi(
+            `/admin/workflow-steps/${selectedStep.id}`,
             {
               method: "PATCH",
               headers: {
@@ -125,12 +214,18 @@ export function WorkflowStepsSection({
                 label,
                 description,
                 active,
-                sortOrder: Number(sortOrder || 0)
+                sortOrder: Number(sortOrder || 0),
+                responsibleName,
+                responsibleEmail,
+                responsibleTitle,
+                clearResponsible: false
               })
             }
           );
 
-          const payload = (await response.json()) as { message?: string; steps?: WorkflowStepTemplate[] };
+          const payload = await readPayload<{ message?: string; steps?: WorkflowStepTemplate[]; requestTypes?: RequestType[] }>(
+            response
+          );
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo actualizar el paso");
@@ -161,7 +256,7 @@ export function WorkflowStepsSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps`, {
+          const response = await fetchApi("/admin/workflow-steps", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
@@ -174,11 +269,16 @@ export function WorkflowStepsSection({
               kind: createKind,
               routing: createRouting,
               scope: createRouting === "scope" ? createScope : null,
-              sortOrder: Number(createSortOrder || 999)
+              sortOrder: Number(createSortOrder || 999),
+              responsibleName: createResponsibleName,
+              responsibleEmail: createResponsibleEmail,
+              responsibleTitle: createResponsibleTitle
             })
           });
 
-          const payload = (await response.json()) as { message?: string; created?: WorkflowStepTemplate; steps?: WorkflowStepTemplate[] };
+          const payload = await readPayload<{ message?: string; created?: WorkflowStepTemplate; steps?: WorkflowStepTemplate[] }>(
+            response
+          );
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo crear el paso");
@@ -205,6 +305,9 @@ export function WorkflowStepsSection({
       setCreateRouting("scope");
       setCreateScope("CUSTOM");
       setCreateSortOrder("999");
+      setCreateResponsibleName("");
+      setCreateResponsibleEmail("");
+      setCreateResponsibleTitle("");
       setMessage("Paso creado correctamente.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Ocurrio un error inesperado");
@@ -230,14 +333,16 @@ export function WorkflowStepsSection({
     try {
       const data = await runWithToast(
         (async () => {
-          const response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/admin/workflow-steps/${selectedStep.id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
+          const response = await fetchApi(
+            `/admin/workflow-steps/${selectedStep.id}?actorEmail=${encodeURIComponent(currentUser.email)}`,
             {
               method: "DELETE"
             }
           );
 
-          const payload = (await response.json()) as { message?: string; steps?: WorkflowStepTemplate[] };
+          const payload = await readPayload<{ message?: string; steps?: WorkflowStepTemplate[]; requestTypes?: RequestType[] }>(
+            response
+          );
 
           if (!response.ok) {
             throw new Error(payload.message ?? "No se pudo eliminar el paso");
@@ -254,8 +359,68 @@ export function WorkflowStepsSection({
 
       const nextSteps = data.steps ?? [];
       onStepTemplatesChange(nextSteps);
+      onRequestTypesChange(data.requestTypes ?? requestTypes);
       setSelectedStepId(nextSteps[0]?.id ?? "");
       setMessage("Paso eliminado correctamente.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Ocurrio un error inesperado");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearStepResponsible() {
+    if (!selectedStep) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Se limpiara el responsable principal del paso ${selectedStep.label}.`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    setBusy(true);
+    setMessage(null);
+
+    try {
+      const data = await runWithToast(
+        (async () => {
+          const response = await fetchApi(
+            `/admin/workflow-steps/${selectedStep.id}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json"
+              },
+              body: JSON.stringify({
+                actorEmail: currentUser.email,
+                label,
+                description,
+                active,
+                sortOrder: Number(sortOrder || 0),
+                clearResponsible: true
+              })
+            }
+          );
+
+          const payload = await readPayload<{ message?: string; steps?: WorkflowStepTemplate[] }>(response);
+
+          if (!response.ok) {
+            throw new Error(payload.message ?? "No se pudo limpiar el responsable del paso");
+          }
+
+          return payload;
+        })(),
+        {
+          loading: { title: "Limpiando responsable..." },
+          success: { title: "Responsable removido" },
+          error: { title: "No se pudo limpiar el responsable" }
+        }
+      );
+
+      onStepTemplatesChange(data.steps ?? stepTemplates);
+      setMessage("Responsable principal removido del paso.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Ocurrio un error inesperado");
     } finally {
@@ -310,11 +475,10 @@ export function WorkflowStepsSection({
               <select
                 className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
                 value={createRouting}
-                onChange={(event) => setCreateRouting(event.target.value as "department" | "scope" | "requester_unit")}
+                onChange={(event) => setCreateRouting(event.target.value as "department" | "scope")}
               >
                 <option value="scope">Por scope</option>
                 <option value="department">Por departamento</option>
-                <option value="requester_unit">Supervisor del departamento</option>
               </select>
               <input
                 className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7] disabled:bg-slate-100"
@@ -330,6 +494,27 @@ export function WorkflowStepsSection({
                 value={createSortOrder}
                 onChange={(event) => setCreateSortOrder(event.target.value)}
                 placeholder="Orden"
+              />
+            </div>
+
+            <div className="grid gap-2 md:grid-cols-3">
+              <input
+                className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                value={createResponsibleName}
+                onChange={(event) => setCreateResponsibleName(event.target.value)}
+                placeholder="Responsable principal (nombre)"
+              />
+              <input
+                className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                value={createResponsibleEmail}
+                onChange={(event) => setCreateResponsibleEmail(event.target.value)}
+                placeholder="Responsable principal (correo)"
+              />
+              <input
+                className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                value={createResponsibleTitle}
+                onChange={(event) => setCreateResponsibleTitle(event.target.value)}
+                placeholder="Responsable principal (cargo)"
               />
             </div>
 
@@ -392,9 +577,7 @@ export function WorkflowStepsSection({
                 <StepBadge>
                   {selectedStep.routing === "department"
                     ? "Por departamento"
-                    : selectedStep.routing === "requester_unit"
-                      ? "Supervisor del departamento"
-                      : selectedStep.scope ?? "Scope"}
+                    : selectedStep.scope ?? "Scope"}
                 </StepBadge>
                 <StepBadge tone={selectedStep.active ? "active" : "inactive"}>{selectedStep.active ? "Activo" : "Inactivo"}</StepBadge>
               </div>
@@ -441,6 +624,27 @@ export function WorkflowStepsSection({
                       Activo
                     </label>
                   </div>
+
+                  <div className="grid gap-2 md:grid-cols-3">
+                    <input
+                      className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                      value={responsibleName}
+                      onChange={(event) => setResponsibleName(event.target.value)}
+                      placeholder="Responsable principal (nombre)"
+                    />
+                    <input
+                      className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                      value={responsibleEmail}
+                      onChange={(event) => setResponsibleEmail(event.target.value)}
+                      placeholder="Responsable principal (correo)"
+                    />
+                    <input
+                      className="w-full rounded-2xl border border-[#bfd2e7] bg-white px-4 py-3 text-sm text-[#001534] outline-none transition focus:border-[#0b5ed7]"
+                      value={responsibleTitle}
+                      onChange={(event) => setResponsibleTitle(event.target.value)}
+                      placeholder="Responsable principal (cargo)"
+                    />
+                  </div>
                 </div>
 
                 <div className="mt-5 flex flex-wrap gap-3">
@@ -460,6 +664,9 @@ export function WorkflowStepsSection({
                       setDescription(selectedStep.description);
                       setActive(selectedStep.active);
                       setSortOrder(String(selectedStep.sort_order));
+                      setResponsibleName(selectedStep.responsible_name ?? "");
+                      setResponsibleEmail(selectedStep.responsible_email ?? "");
+                      setResponsibleTitle(selectedStep.responsible_title ?? "");
                       setMessage(null);
                     }}
                     className="rounded-full border border-[#bfd2e7] bg-white px-5 py-3 text-sm font-semibold text-[#1e3a5f] transition hover:bg-[#eef5ff] disabled:cursor-not-allowed disabled:opacity-50"
@@ -473,6 +680,14 @@ export function WorkflowStepsSection({
                     className="rounded-full border border-rose-200 bg-rose-50 px-5 py-3 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     Eliminar paso
+                  </button>
+                  <button
+                    type="button"
+                    onClick={clearStepResponsible}
+                    disabled={busy}
+                    className="rounded-full border border-amber-200 bg-amber-50 px-5 py-3 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    Limpiar responsable
                   </button>
                 </div>
 
@@ -512,9 +727,13 @@ export function WorkflowStepsSection({
                       <strong className="text-[#001534]">Ruteo:</strong>{" "}
                       {selectedStep.routing === "department"
                         ? "Por departamento"
-                        : selectedStep.routing === "requester_unit"
-                          ? "Supervisor del departamento"
-                          : `Scope ${selectedStep.scope ?? "N/A"}`}
+                        : `Scope ${selectedStep.scope ?? "N/A"}`}
+                    </div>
+                    <div className="rounded-2xl border border-[#d7e4f2] bg-white px-4 py-3">
+                      <strong className="text-[#001534]">Responsable:</strong>{" "}
+                      {selectedStep.responsible_name && selectedStep.responsible_email
+                        ? `${selectedStep.responsible_name} | ${selectedStep.responsible_email}`
+                        : "Sin responsable principal"}
                     </div>
                   </div>
                 </div>

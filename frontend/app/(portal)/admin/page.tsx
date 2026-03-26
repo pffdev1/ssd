@@ -6,14 +6,11 @@ import { AppHeader } from "@/src/shared/components/AppHeader";
 import {
   checkAdmin,
   getAdminUsers,
-  getAdminApprovers,
   getApprovedMobileLines,
   getApproverInbox,
   getApproverProfile,
   getCatalog,
   getCatalogItems,
-  getEmployeeProfiles,
-  getOrgUnits,
   getWorkflowSteps,
   getUserRoles
 } from "@/src/shared/lib/api";
@@ -39,15 +36,12 @@ export default async function AdminPage() {
 
   const currentUser = buildCurrentUser(session.user.name, session.user.email, true, approverProfiles, userRoles);
 
-  const [admins, approvedMobileLines, inboxItems, catalogItems, approvers, stepTemplates, orgUnits, employeeProfiles] = await Promise.all([
+  const [admins, approvedMobileLines, inboxItems, catalogItems, stepTemplates] = await Promise.all([
     getAdminUsers(currentUser.email),
     getApprovedMobileLines(currentUser.email),
     getApproverInbox(currentUser.email),
     getCatalogItems(currentUser.email),
-    getAdminApprovers(currentUser.email),
-    getWorkflowSteps(currentUser.email),
-    getOrgUnits(currentUser.email),
-    getEmployeeProfiles(currentUser.email)
+    getWorkflowSteps(currentUser.email)
   ]);
 
   return (
@@ -66,9 +60,6 @@ export default async function AdminPage() {
         admins={admins}
         approvedMobileLines={approvedMobileLines}
         catalogItems={catalogItems}
-        approvers={approvers}
-        orgUnits={orgUnits}
-        employeeProfiles={employeeProfiles}
         requestTypes={catalog.requestTypes}
         stepTemplates={stepTemplates}
       />

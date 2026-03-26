@@ -3,35 +3,27 @@ import {
   addAdminUser,
   addApprover,
   addCatalogItem,
-  addEmployeeProfile,
-  addOrgUnit,
   createWorkflowStepTemplate,
   createRequestType,
   addUserRole,
   getDepartments,
-  getEmployeeDirectoryProfile,
   getUserRoles,
   isAdminUser,
   listAdminUsers,
   listApprovedMobileLineRequests,
   listApprovers,
   listCatalogItems,
-  listEmployeeProfiles,
-  listOrgUnits,
   listRequestTypes,
   listUserRoles,
   listWorkflowStepTemplates,
   moveApprover,
   reorderApprovers,
   removeApprover,
-  removeEmployeeProfile,
   removeRequestType,
   removeWorkflowStepTemplate,
   setApproverAssignmentRole,
   updateApprover,
   updateCatalogItem,
-  updateEmployeeProfile,
-  updateOrgUnit,
   updateRequestType,
   updateRequestTypeWorkflow,
   updateWorkflowStepTemplate
@@ -105,36 +97,6 @@ catalogRouter.get("/admin/catalog-items", async (_req, res, next) => {
   }
 });
 
-catalogRouter.get("/admin/org-units", async (_req, res, next) => {
-  try {
-    const actorEmail = await assertAdminActor(_req, res);
-
-    if (!actorEmail) {
-      return;
-    }
-
-    const units = await listOrgUnits();
-    res.json(units);
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.get("/admin/employee-profiles", async (_req, res, next) => {
-  try {
-    const actorEmail = await assertAdminActor(_req, res);
-
-    if (!actorEmail) {
-      return;
-    }
-
-    const profiles = await listEmployeeProfiles();
-    res.json(profiles);
-  } catch (error) {
-    next(error);
-  }
-});
-
 catalogRouter.get("/admin/mobile-lines", async (_req, res, next) => {
   try {
     const actorEmail = await assertAdminActor(_req, res);
@@ -145,22 +107,6 @@ catalogRouter.get("/admin/mobile-lines", async (_req, res, next) => {
 
     const requests = await listApprovedMobileLineRequests();
     res.json(requests);
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.get("/employees/profile", async (req, res, next) => {
-  try {
-    const email = String(req.query.email ?? "");
-
-    if (!email) {
-      res.status(400).json({ message: "El correo es requerido" });
-      return;
-    }
-
-    const profile = await getEmployeeDirectoryProfile(email);
-    res.json(profile);
   } catch (error) {
     next(error);
   }
@@ -420,204 +366,6 @@ catalogRouter.patch("/admin/catalog-items/:id", async (req, res, next) => {
   }
 });
 
-catalogRouter.post("/admin/org-units", async (req, res, next) => {
-  try {
-    const body = req.body as Record<string, unknown>;
-    const actorEmail = String(body.actorEmail ?? "");
-
-    if (!actorEmail) {
-      res.status(400).json({ message: "El actor es requerido" });
-      return;
-    }
-
-    const actorIsAdmin = await isAdminUser(actorEmail);
-
-    if (!actorIsAdmin) {
-      res.status(403).json({ message: "Solo un administrador puede modificar el organigrama" });
-      return;
-    }
-
-    const name = String(body.name ?? "");
-    const unitType = String(body.unitType ?? "");
-    const parentId = body.parentId ? String(body.parentId) : null;
-    const sortOrder = Number(body.sortOrder ?? 999);
-
-    if (!name || !unitType) {
-      res.status(400).json({ message: "Nombre y tipo de unidad son requeridos" });
-      return;
-    }
-
-    const created = await addOrgUnit({
-      name,
-      unitType,
-      parentId,
-      sortOrder
-    });
-
-    const units = await listOrgUnits();
-    res.status(201).json({ created, units });
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.patch("/admin/org-units/:id", async (req, res, next) => {
-  try {
-    const body = req.body as Record<string, unknown>;
-    const actorEmail = String(body.actorEmail ?? "");
-
-    if (!actorEmail) {
-      res.status(400).json({ message: "El actor es requerido" });
-      return;
-    }
-
-    const actorIsAdmin = await isAdminUser(actorEmail);
-
-    if (!actorIsAdmin) {
-      res.status(403).json({ message: "Solo un administrador puede modificar el organigrama" });
-      return;
-    }
-
-    const name = String(body.name ?? "");
-    const unitType = String(body.unitType ?? "");
-    const parentId = body.parentId ? String(body.parentId) : null;
-    const sortOrder = Number(body.sortOrder ?? 999);
-
-    if (!name || !unitType) {
-      res.status(400).json({ message: "Nombre y tipo de unidad son requeridos" });
-      return;
-    }
-
-    const updated = await updateOrgUnit({
-      id: req.params.id,
-      name,
-      unitType,
-      parentId,
-      sortOrder
-    });
-
-    const units = await listOrgUnits();
-    res.json({ updated, units });
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.post("/admin/employee-profiles", async (req, res, next) => {
-  try {
-    const body = req.body as Record<string, unknown>;
-    const actorEmail = String(body.actorEmail ?? "");
-
-    if (!actorEmail) {
-      res.status(400).json({ message: "El actor es requerido" });
-      return;
-    }
-
-    const actorIsAdmin = await isAdminUser(actorEmail);
-
-    if (!actorIsAdmin) {
-      res.status(403).json({ message: "Solo un administrador puede modificar colaboradores" });
-      return;
-    }
-
-    const fullName = String(body.fullName ?? "");
-    const title = String(body.title ?? "");
-    const orgUnitId = String(body.orgUnitId ?? "");
-    const email = body.email ? String(body.email) : null;
-    const reportsToProfileId = body.reportsToProfileId ? String(body.reportsToProfileId) : null;
-    const sortOrder = Number(body.sortOrder ?? 999);
-
-    if (!fullName || !title || !orgUnitId) {
-      res.status(400).json({ message: "Nombre, cargo y unidad son requeridos" });
-      return;
-    }
-
-    const created = await addEmployeeProfile({
-      fullName,
-      email,
-      title,
-      orgUnitId,
-      reportsToProfileId,
-      sortOrder
-    });
-
-    const profiles = await listEmployeeProfiles();
-    res.status(201).json({ created, profiles });
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.patch("/admin/employee-profiles/:id", async (req, res, next) => {
-  try {
-    const body = req.body as Record<string, unknown>;
-    const actorEmail = String(body.actorEmail ?? "");
-
-    if (!actorEmail) {
-      res.status(400).json({ message: "El actor es requerido" });
-      return;
-    }
-
-    const actorIsAdmin = await isAdminUser(actorEmail);
-
-    if (!actorIsAdmin) {
-      res.status(403).json({ message: "Solo un administrador puede modificar colaboradores" });
-      return;
-    }
-
-    const fullName = String(body.fullName ?? "");
-    const title = String(body.title ?? "");
-    const orgUnitId = String(body.orgUnitId ?? "");
-    const email = body.email ? String(body.email) : null;
-    const reportsToProfileId = body.reportsToProfileId ? String(body.reportsToProfileId) : null;
-    const sortOrder = Number(body.sortOrder ?? 999);
-
-    if (!fullName || !title || !orgUnitId) {
-      res.status(400).json({ message: "Nombre, cargo y unidad son requeridos" });
-      return;
-    }
-
-    const updated = await updateEmployeeProfile({
-      id: req.params.id,
-      fullName,
-      email,
-      title,
-      orgUnitId,
-      reportsToProfileId,
-      sortOrder
-    });
-
-    const profiles = await listEmployeeProfiles();
-    res.json({ updated, profiles });
-  } catch (error) {
-    next(error);
-  }
-});
-
-catalogRouter.delete("/admin/employee-profiles/:id", async (req, res, next) => {
-  try {
-    const actorEmail = String(req.query.actorEmail ?? "");
-
-    if (!actorEmail) {
-      res.status(400).json({ message: "El actor es requerido" });
-      return;
-    }
-
-    const actorIsAdmin = await isAdminUser(actorEmail);
-
-    if (!actorIsAdmin) {
-      res.status(403).json({ message: "Solo un administrador puede eliminar colaboradores" });
-      return;
-    }
-
-    const removed = await removeEmployeeProfile(req.params.id);
-    const profiles = await listEmployeeProfiles();
-    res.json({ removed, profiles });
-  } catch (error) {
-    next(error);
-  }
-});
-
 catalogRouter.post("/admin/request-types", async (req, res, next) => {
   try {
     const body = req.body as Record<string, unknown>;
@@ -787,6 +535,10 @@ catalogRouter.patch("/admin/workflow-steps/:id", async (req, res, next) => {
     const description = String(body.description ?? "");
     const active = Boolean(body.active);
     const sortOrder = Number(body.sortOrder ?? 999);
+    const responsibleName = String(body.responsibleName ?? "");
+    const responsibleEmail = String(body.responsibleEmail ?? "");
+    const responsibleTitle = String(body.responsibleTitle ?? "");
+    const clearResponsible = Boolean(body.clearResponsible);
 
     if (!label || !description) {
       res.status(400).json({ message: "Etiqueta y descripcion son requeridas" });
@@ -798,7 +550,11 @@ catalogRouter.patch("/admin/workflow-steps/:id", async (req, res, next) => {
       label,
       description,
       active,
-      sortOrder
+      sortOrder,
+      responsibleName,
+      responsibleEmail,
+      responsibleTitle,
+      clearResponsible
     });
 
     const steps = await listWorkflowStepTemplates();
@@ -833,9 +589,12 @@ catalogRouter.post("/admin/workflow-steps", async (req, res, next) => {
     const label = String(body.label ?? "");
     const description = String(body.description ?? "");
     const kind = String(body.kind ?? "") as "approval" | "fulfillment";
-    const routing = String(body.routing ?? "") as "department" | "scope" | "requester_unit";
+    const routing = String(body.routing ?? "") as "department" | "scope";
     const scope = body.scope ? String(body.scope) : null;
     const sortOrder = Number(body.sortOrder ?? 999);
+    const responsibleName = String(body.responsibleName ?? "");
+    const responsibleEmail = String(body.responsibleEmail ?? "");
+    const responsibleTitle = String(body.responsibleTitle ?? "");
 
     if (!code || !label || !description || !kind || !routing) {
       res.status(400).json({ message: "Codigo, etiqueta, descripcion, tipo y ruteo son requeridos" });
@@ -849,7 +608,10 @@ catalogRouter.post("/admin/workflow-steps", async (req, res, next) => {
       kind,
       routing,
       scope,
-      sortOrder
+      sortOrder,
+      responsibleName,
+      responsibleEmail,
+      responsibleTitle
     });
 
     const steps = await listWorkflowStepTemplates();
@@ -880,8 +642,8 @@ catalogRouter.delete("/admin/workflow-steps/:id", async (req, res, next) => {
     }
 
     await removeWorkflowStepTemplate(req.params.id);
-    const steps = await listWorkflowStepTemplates();
-    res.json({ steps });
+    const [steps, requestTypes] = await Promise.all([listWorkflowStepTemplates(), listRequestTypes()]);
+    res.json({ steps, requestTypes });
   } catch (error) {
     next(error);
   }
@@ -910,7 +672,6 @@ catalogRouter.post("/admin/approvers", async (req, res, next) => {
     const scope = String(body.scope ?? "");
     const roleCode = String(body.roleCode ?? "");
     const department = body.department ? String(body.department) : null;
-    const orgUnitId = body.orgUnitId ? String(body.orgUnitId) : null;
     const assignmentRole = body.assignmentRole ? String(body.assignmentRole) : "PRIMARY";
 
     if (!fullName || !email || !title || !scope || !roleCode) {
@@ -920,7 +681,6 @@ catalogRouter.post("/admin/approvers", async (req, res, next) => {
 
     const created = await addApprover({
       department,
-      orgUnitId,
       scope,
       roleCode,
       fullName,

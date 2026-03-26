@@ -52,6 +52,34 @@ function calculateInclusiveDays(startDate: string, endDate: string) {
   return Math.floor((endUtc - startUtc) / 86_400_000) + 1;
 }
 
+function normalizeText(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
+function suggestDepartment(departments: string[], profileDepartment?: string) {
+  if (!profileDepartment?.trim()) {
+    return "";
+  }
+
+  const normalizedProfile = normalizeText(profileDepartment);
+
+  const exactMatch = departments.find((item) => normalizeText(item) === normalizedProfile);
+  if (exactMatch) {
+    return exactMatch;
+  }
+
+  const partialMatch = departments.find((item) => {
+    const normalizedItem = normalizeText(item);
+    return normalizedItem.includes(normalizedProfile) || normalizedProfile.includes(normalizedItem);
+  });
+
+  return partialMatch ?? "";
+}
+
 function buildInitialFormValues(selectedType: RequestType | undefined, requesterName: string): Record<string, string> {
   if (!selectedType) {
     return {};
@@ -172,9 +200,13 @@ export function RequestWorkspace({
 }) {
   const visibleRequestTypes = useMemo(() => getVisibleRequestTypes(catalog.requestTypes, currentUser), [catalog.requestTypes, currentUser]);
   const singleTypeView = visibleRequestTypes.length === 1;
+  const suggestedDepartment = useMemo(
+    () => suggestDepartment(catalog.departments, currentUser.department),
+    [catalog.departments, currentUser.department]
+  );
   const [selectedTypeCode, setSelectedTypeCode] = useState(initialTypeCode || visibleRequestTypes[0]?.code || "");
   const [formValues, setFormValues] = useState<Record<string, string>>({});
-  const [department, setDepartment] = useState("");
+  const [department, setDepartment] = useState(suggestedDepartment);
   const [subject, setSubject] = useState(visibleRequestTypes[0]?.name ?? "");
   const [justification, setJustification] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -182,63 +214,132 @@ export function RequestWorkspace({
 
   const selectedType =
     visibleRequestTypes.find((type) => type.code === selectedTypeCode) ?? visibleRequestTypes[0] ?? catalog.requestTypes[0];
+  const apiCandidates = useMemo(() => {
+    const configured = process.env.NEXT_PUBLIC_API_URL?.replace(/\/+$/, "");
+    const host = typeof window !== "undefined" ? window.location.hostname.toLowerCase() : "";
+    const protocol = typeof window !== "undefined" ? window.location.protocol.toLowerCase() : "http:";
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    const values: string[] = [];
+
+    if (!isLocalHost) {
+      values.push("/api");
+    }
+
+    const configuredIsHttpOnHttpsPage =
+      Boolean(configured) && protocol === "https:" && configured?.toLowerCase().startsWith("http://");
+
+    if (configured && !configuredIsHttpOnHttpsPage) {
+      values.push(configured);
+    }
+
+    if (isLocalHost) {
+      values.push("/api");
+
+      if (!configured) {
+        values.push("http://localhost:4000/api");
+      }
+    }
+
+    if (!isLocalHost && protocol === "http:") {
+      values.push(`http://${host}:4000/api`);
+    }
+
+    return Array.from(new Set(values.filter(Boolean)));
+  }, []);
+
+  async function fetchApi(path: string, init: RequestInit) {
+    let last404Response: Response | null = null;
+    let lastError: unknown = null;
+
+    for (const base of apiCandidates) {
+      try {
+        const response = await fetch(`${base}${path}`, init);
+
+        if (response.status === 404) {
+          last404Response = response;
+          continue;
+        }
+
+        return response;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    if (last404Response) {
+      return last404Response;
+    }
+
+    throw lastError instanceof Error ? lastError : new Error("No se pudo contactar el API de SSD");
+  }
+
+  async function readPayload<T>(response: Response): Promise<T & { message?: string }> {
+    const raw = await response.text();
+
+    try {
+      return JSON.parse(raw) as T & { message?: string };
+    } catch {
+      const candidates = apiCandidates.length > 0 ? apiCandidates.join(", ") : "sin rutas candidatas";
+      return {
+        message: `Respuesta invalida del servidor (${response.status}). Verifica API/proxy. Rutas probadas: ${candidates}`
+      } as T & { message?: string };
+    }
+  }
+
   const departmentStepAssignments = useMemo(() => {
-    if (!selectedType || !department) {
+    if (!selectedType) {
       return [];
     }
 
-    return selectedType.workflow.steps
-      .filter((step) => step.routing === "department" || step.routing === "requester_unit")
+    const baseSteps = selectedType.workflow.steps.filter((step) => step.code !== "IMMEDIATE_LEAD");
+
+    const managerApprover = currentUser.managerEmail
+      ? {
+          full_name: currentUser.managerName ?? "Jefatura inmediata",
+          email: currentUser.managerEmail,
+          title: currentUser.managerTitle ?? "Jefatura inmediata"
+        }
+      : null;
+
+    const managerStep = {
+      step: {
+        code: "IMMEDIATE_LEAD",
+        label: "Aprobacion de Jefatura Inmediata",
+        kind: "approval" as const,
+        routing: "scope" as const,
+        scope: "REQUESTER_MANAGER"
+      },
+      approver: managerApprover,
+      isSelf: managerApprover ? managerApprover.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase() : false,
+      nextStep: null as { label: string } | null,
+      nextApprover: null as { full_name: string } | null
+    };
+
+    const mappedDepartmentSteps = baseSteps
+      .filter((step) => step.routing === "department")
       .map((step) => {
-        const approver = catalog.approvers.find((item) => item.department === department && item.role_code === step.code);
-        const graphManagerPreview =
-          step.routing === "requester_unit" && currentUser.managerEmail
-            ? {
-                full_name: currentUser.managerName ?? "Jefatura inmediata",
-                email: currentUser.managerEmail,
-                title: currentUser.managerTitle ?? "Jefatura inmediata"
-              }
-            : null;
+        const approver = department
+          ? catalog.approvers.find((item) => item.department === department && item.role_code === step.code)
+          : undefined;
         const resolvedApprover = approver
           ? {
               full_name: approver.full_name,
               email: approver.email,
               title: approver.title
             }
-          : graphManagerPreview;
-        const isSelf = resolvedApprover ? resolvedApprover.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase() : false;
-        const stepIndex = selectedType.workflow.steps.findIndex((item) => item.code === step.code);
-        const nextStep = isSelf
-          ? selectedType.workflow.steps.slice(stepIndex + 1).find((candidate) => {
-              if (candidate.routing === "scope") {
-                return true;
-              }
-
-              const candidateApprover = catalog.approvers.find(
-                (item) => item.department === department && item.role_code === candidate.code
-              );
-
-              if (!candidateApprover) {
-                return true;
-              }
-
-              return candidateApprover.email.trim().toLowerCase() !== currentUser.email.trim().toLowerCase();
-            }) ?? null
           : null;
-        const nextApprover =
-          nextStep && (nextStep.routing === "department" || nextStep.routing === "requester_unit")
-            ? catalog.approvers.find((item) => item.department === department && item.role_code === nextStep.code)
-            : undefined;
 
         return {
           step,
           approver: resolvedApprover,
-          isSelf,
-          nextStep,
-          nextApprover
+          isSelf: resolvedApprover ? resolvedApprover.email.trim().toLowerCase() === currentUser.email.trim().toLowerCase() : false,
+          nextStep: null as { label: string } | null,
+          nextApprover: null as { full_name: string } | null
         };
       });
-  }, [catalog.approvers, currentUser.email, department, selectedType]);
+
+    return [managerStep, ...mappedDepartmentSteps];
+  }, [catalog.approvers, currentUser.email, currentUser.managerEmail, currentUser.managerName, currentUser.managerTitle, department, selectedType]);
   const vacationDays = useMemo(() => {
     if (selectedType?.code !== "VACATION_REQUEST") {
       return null;
@@ -296,9 +397,9 @@ export function RequestWorkspace({
 
     setFormValues(buildInitialFormValues(selectedType, currentUser.name));
     setSubject(selectedType.name);
-    setDepartment("");
+    setDepartment(suggestedDepartment);
     setMessage(null);
-  }, [currentUser.name, selectedType]);
+  }, [currentUser.name, selectedType, suggestedDepartment]);
 
   useEffect(() => {
     if (initialTypeCode && visibleRequestTypes.some((type) => type.code === initialTypeCode)) {
@@ -337,7 +438,7 @@ export function RequestWorkspace({
           normalizedPayload.diasTomados = String(vacationDays);
         }
 
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL ?? "/api"}/requests`, {
+        const response = await fetchApi("/requests", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -357,7 +458,7 @@ export function RequestWorkspace({
           })
         });
 
-        const data = (await response.json()) as { ticketCode?: string; message?: string };
+        const data = await readPayload<{ ticketCode?: string; message?: string }>(response);
 
         if (!response.ok) {
           throw new Error(data.message ?? "No se pudo registrar la solicitud");
@@ -465,7 +566,7 @@ export function RequestWorkspace({
               <div className="rounded-2xl border border-[#d7e4f2] bg-[#f5faff] px-4 py-3 text-sm text-[#001534]">
                 {currentUser.managerName || currentUser.managerEmail
                   ? `${currentUser.managerName ?? "Supervisor"}${currentUser.managerEmail ? ` | ${currentUser.managerEmail}` : ""}`
-                  : "No disponible en Entra. SSD aplicara el fallback por departamento/organigrama."}
+                  : "No disponible en Entra. SSD continuara con los pasos adicionales del workflow."}
               </div>
             </div>
           </div>
@@ -486,6 +587,15 @@ export function RequestWorkspace({
                   </option>
                 ))}
               </select>
+              {suggestedDepartment ? (
+                <p className="text-xs text-[#1e3a5f]">
+                  Sugerido desde perfil corporativo: <strong>{suggestedDepartment}</strong>
+                </p>
+              ) : currentUser.department ? (
+                <p className="text-xs text-amber-700">
+                  Departamento en perfil: <strong>{currentUser.department}</strong>. Selecciona manualmente el equivalente en SSD.
+                </p>
+              ) : null}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-[#1e3a5f]">Asunto</label>
@@ -531,7 +641,7 @@ export function RequestWorkspace({
                           )}
                         </div>
                         <span className="rounded-full border border-[#d7e4f2] bg-[#f5faff] px-3 py-1 text-[11px] uppercase tracking-[0.16em] text-[#1e3a5f]">
-                          {isSelf ? "Autoomitido" : step.routing === "requester_unit" ? "Supervisor" : approver ? "Principal" : "Pendiente"}
+                          {isSelf ? "Autoomitido" : step.code === "IMMEDIATE_LEAD" ? "Supervisor" : approver ? "Principal" : "Pendiente"}
                         </span>
                       </div>
                     </div>
@@ -588,7 +698,13 @@ export function RequestWorkspace({
           <div className="rounded-[1.6rem] border border-[#d7e4f2] bg-[#f5faff] p-5">
             <div className="text-xs uppercase tracking-[0.26em] text-slate-500">Ruta de aprobacion</div>
             <div className="mt-4 grid gap-3">
-              {selectedType.workflow.steps.map((step, index) => (
+              {[{
+                code: "IMMEDIATE_LEAD",
+                label: "Aprobacion de Jefatura Inmediata",
+                kind: "approval" as const,
+                routing: "scope" as const,
+                scope: "REQUESTER_MANAGER"
+              }, ...selectedType.workflow.steps.filter((step) => step.code !== "IMMEDIATE_LEAD")].map((step, index) => (
                 <div key={step.code} className="flex items-center gap-4 rounded-2xl border border-[#bfd2e7] bg-white p-4">
                   {(() => {
                     const preview = departmentStepAssignments.find((item) => item.step.code === step.code);
@@ -604,11 +720,9 @@ export function RequestWorkspace({
                       {step.kind === "approval" ? "Aprobacion" : "Ejecucion"} |{" "}
                       {step.routing === "department"
                         ? "Por departamento"
-                        : step.routing === "requester_unit"
-                          ? "Supervisor del departamento"
-                          : step.scope}
+                        : step.scope}
                     </div>
-                    {(step.routing === "department" || step.routing === "requester_unit") && department ? (
+                    {step.routing === "department" && department ? (
                       <div className="mt-2 text-sm text-[#1e3a5f]">
                         {preview?.isSelf
                           ? `Autoomitido por autoaprobacion${
@@ -619,11 +733,11 @@ export function RequestWorkspace({
                           : "Responsable pendiente por configurar"}
                       </div>
                     ) : null}
-                    {step.routing === "requester_unit" ? (
+                    {step.code === "IMMEDIATE_LEAD" ? (
                       <div className="mt-2 text-sm text-[#1e3a5f]">
-                        {preview?.isSelf
-                          ? "Como eres el responsable de este paso, SSD lo omitira automaticamente y seguira con la siguiente aprobacion."
-                          : "SSD tomara este paso desde el supervisor principal configurado para el departamento seleccionado."}
+                        {preview?.approver
+                          ? `SSD usara tu jefatura inmediata de Entra: ${preview.approver.full_name}.`
+                          : "No se detecto jefatura en Entra. El flujo continuara con los pasos adicionales configurados."}
                       </div>
                     ) : null}
                   </div>
