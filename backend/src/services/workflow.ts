@@ -633,12 +633,6 @@ async function buildStepAssignments(
       continue;
     }
 
-    const previousAssignment = assignments.at(-1);
-
-    if (previousAssignment && normalizeEmail(previousAssignment.approverEmail) === normalizeEmail(approver.email)) {
-      continue;
-    }
-
     assignments.push({
       sequence: assignments.length + 1,
       label: template.label,
@@ -1365,27 +1359,89 @@ export async function actOnStep(
       return getRequestById(requestId);
     }
 
-    const nextStepResult = await client.query<RequestStepRecord>(
+    const upcomingStepsResult = await client.query<RequestStepRecord>(
       `select *
        from request_steps
        where request_id = $1
          and sequence > $2
-       order by sequence asc
-       limit 1`,
+       order by sequence asc`,
       [requestId, currentStep.sequence]
     );
 
-    if (nextStepResult.rowCount === 0) {
+    let nextStep: RequestStepRecord | null = null;
+
+    for (const candidate of upcomingStepsResult.rows) {
+      if (candidate.status !== "queued") {
+        continue;
+      }
+
+      const isSameApprover = candidate.approver_email.toLowerCase() === input.actorEmail.toLowerCase();
+      const canAutoSkip = isSameApprover && candidate.kind === "approval";
+
+      if (canAutoSkip) {
+        const autoSignature = buildDigitalSignature({
+          requestId,
+          stepId: candidate.id,
+          actorName: input.actorName,
+          actorEmail: input.actorEmail,
+          decision: "approve"
+        });
+
+        const autoMetadata = {
+          ...(candidate.metadata ?? {}),
+          digitalSignature: autoSignature,
+          autoSkippedBySameApprover: true
+        };
+
+        await client.query(
+          `update request_steps
+           set status = 'approved',
+               decision = 'approve',
+               comments = coalesce(comments, 'Autoomitido: mismo aprobador del paso anterior.'),
+               acted_at = now(),
+               metadata = $2::jsonb
+           where id = $1`,
+          [candidate.id, JSON.stringify(autoMetadata)]
+        );
+
+        await client.query(
+          `insert into request_events (
+            request_id,
+            event_type,
+            actor_name,
+            actor_email,
+            notes,
+            payload
+          ) values ($1, 'STEP_AUTO_SKIPPED', $2, $3, $4, $5::jsonb)`,
+          [
+            requestId,
+            input.actorName,
+            input.actorEmail,
+            `${candidate.label} autoomitido por aprobador repetido`,
+            JSON.stringify({
+              stepId: candidate.id,
+              reason: "same_approver_as_previous",
+              digitalSignature: autoSignature
+            })
+          ]
+        );
+
+        continue;
+      }
+
+      nextStep = candidate;
+      break;
+    }
+
+    if (!nextStep) {
       await client.query(
         `update requests
          set status = $2,
-             updated_at = now()
+         updated_at = now()
          where id = $1`,
         [requestId, input.decision === "complete" ? "completed" : "approved"]
       );
     } else {
-      const nextStep = nextStepResult.rows[0];
-
       await client.query(
         `update request_steps
          set status = 'pending'

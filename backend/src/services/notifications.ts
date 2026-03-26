@@ -781,9 +781,29 @@ async function notifyRequesterCreated(request: RequestDetailRecord) {
 }
 
 async function notifyApprover(request: RequestDetailRecord, step: RequestStepRecord) {
+  const existingNotification = await query<{ total: string }>(
+    `select count(*)::text as total
+     from request_events
+     where request_id = $1
+       and event_type = 'STEP_PENDING_NOTIFIED'
+       and coalesce(payload ->> 'stepId', '') = $2`,
+    [request.id, step.id]
+  );
+
+  if (Number(existingNotification.rows[0]?.total ?? "0") > 0) {
+    logNotification("info", "Correo pendiente omitido por deduplicacion de paso", {
+      tag: "approver_pending",
+      requestId: request.id,
+      ticket: request.ticket_code,
+      stepId: step.id,
+      recipient: step.approver_email
+    });
+    return false;
+  }
+
   const actionLabel = step.kind === "approval" ? "aprobar" : "ejecutar";
 
-  return sendEmail({
+  const sent = await sendEmail({
     to: step.approver_email,
     subject: `SSD | Accion requerida ${request.ticket_code}`,
     tag: "approver_pending",
@@ -813,6 +833,30 @@ async function notifyApprover(request: RequestDetailRecord, step: RequestStepRec
       actionUrl: inboxUrl()
     })
   });
+
+  if (sent) {
+    await query(
+      `insert into request_events (
+        request_id,
+        event_type,
+        actor_name,
+        actor_email,
+        notes,
+        payload
+      ) values ($1, 'STEP_PENDING_NOTIFIED', 'SSD Notifications', 'noreply@ssd.local', $2, $3::jsonb)`,
+      [
+        request.id,
+        `Notificacion de paso pendiente enviada a ${step.approver_email}`,
+        JSON.stringify({
+          stepId: step.id,
+          approverEmail: step.approver_email,
+          label: step.label
+        })
+      ]
+    );
+  }
+
+  return sent;
 }
 
 async function notifyRequesterUpdate(request: RequestDetailRecord, actedStep: RequestStepRecord, pendingStep?: RequestStepRecord) {
