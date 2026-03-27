@@ -5,13 +5,18 @@ import { render } from "@react-email/render";
 import nodemailer from "nodemailer";
 import { query } from "../db";
 import { env } from "../config/env";
-import RequestNotificationEmail, {
-  RequestNotificationEmailProps,
+import {
   RequestNotificationLink,
   RequestNotificationRow,
   RequestNotificationSignature,
   RequestNotificationTone
 } from "../emails/templates/RequestNotificationEmail";
+import RequestCreatedEmail, { RequestCreatedEmailProps } from "../emails/templates/notifications/RequestCreatedEmail";
+import ApproverPendingEmail, { ApproverPendingEmailProps } from "../emails/templates/notifications/ApproverPendingEmail";
+import RequesterUpdateEmail, { RequesterUpdateEmailProps } from "../emails/templates/notifications/RequesterUpdateEmail";
+import MobileLineAdminReadyEmail, {
+  MobileLineAdminReadyEmailProps
+} from "../emails/templates/notifications/MobileLineAdminReadyEmail";
 import { AdminUserRecord, RequestDetailRecord, RequestStepRecord } from "../types/domain";
 
 const PANAMA_LOCALE = "es-PA";
@@ -317,12 +322,12 @@ function formatHtmlValue(value: unknown) {
   return escapeHtml(formatValue(value));
 }
 
-async function renderNotificationTemplate(props: RequestNotificationEmailProps) {
+async function renderEmailComponent(Component: React.ComponentType<any>, props: Record<string, unknown>) {
   return render(
-    React.createElement(RequestNotificationEmail, {
+    React.createElement(Component, {
+      ...props,
       brandLogoSrc: existsSync(EMAIL_LOGO_PATH) ? `cid:${EMAIL_LOGO_CID}` : `${env.appBaseUrl}/brand/pedersen-connect-logo.png`,
-      brandLogoAlt: "Pedersen Connect",
-      ...props
+      brandLogoAlt: "Pedersen Connect"
     })
   );
 }
@@ -750,33 +755,27 @@ function isMobileLineApprovedByGg(request: RequestDetailRecord, actedStep?: Requ
 async function notifyRequesterCreated(request: RequestDetailRecord) {
   const pendingStep = findPendingStep(request);
 
+  const templateProps: Omit<RequestCreatedEmailProps, "brandLogoSrc" | "brandLogoAlt"> = {
+    previewText: `Solicitud registrada ${request.ticket_code}`,
+    greetingName: request.requester_name,
+    statusLabel: translateStatus(request.status),
+    statusDetail: "SSD registro tu solicitud y la envio al primer responsable disponible.",
+    summaryRows: [
+      { label: "Ticket", value: request.ticket_code },
+      { label: "Tipo", value: request.request_type_name },
+      { label: "Departamento", value: request.department },
+      { label: "Primer responsable", value: pendingStep ? `${pendingStep.approver_name} (${pendingStep.label})` : "Pendiente de configuracion" }
+    ],
+    detailRows: buildRequestSummaryRows(request),
+    actionUrl: requestUrl(request)
+  };
+
   return sendEmail({
     to: request.requester_email,
     subject: `SSD | Solicitud registrada ${request.ticket_code}`,
     tag: "requester_created",
     request,
-    html: await renderNotificationTemplate({
-      previewText: `Solicitud registrada ${request.ticket_code}`,
-      tone: "info",
-      categoryLabel: "Registro",
-      title: "Solicitud registrada",
-      subtitle: "Tu solicitud ya fue recibida por el Sistema de Solicitudes Digital.",
-      greetingName: request.requester_name,
-      introText: "Tu solicitud fue registrada correctamente y ya entro al flujo de aprobacion corporativo.",
-      statusLabel: translateStatus(request.status),
-      statusDetail: "SSD registro tu solicitud y la envio al primer responsable disponible.",
-      summaryHeading: "Registro inicial",
-      summaryRows: [
-        { label: "Ticket", value: request.ticket_code },
-        { label: "Tipo", value: request.request_type_name },
-        { label: "Departamento", value: request.department },
-        { label: "Primer responsable", value: pendingStep ? `${pendingStep.approver_name} (${pendingStep.label})` : "Pendiente de configuracion" }
-      ],
-      detailHeading: "Resumen de la solicitud",
-      detailRows: buildRequestSummaryRows(request),
-      actionLabel: "Ver solicitud",
-      actionUrl: requestUrl(request)
-    })
+    html: await renderEmailComponent(RequestCreatedEmail, templateProps)
   });
 }
 
@@ -802,36 +801,30 @@ async function notifyApprover(request: RequestDetailRecord, step: RequestStepRec
   }
 
   const actionLabel = step.kind === "approval" ? "aprobar" : "ejecutar";
+  const templateProps: Omit<ApproverPendingEmailProps, "brandLogoSrc" | "brandLogoAlt"> = {
+    previewText: `Accion requerida ${request.ticket_code}`,
+    categoryLabel: step.kind === "approval" ? "Aprobacion" : "Ejecucion",
+    subtitle: `Tienes una solicitud pendiente por ${actionLabel}.`,
+    greetingName: step.approver_name,
+    introText: `Se te asigno una solicitud en el paso ${step.label}.`,
+    statusDetail: `${step.label} requiere tu ${step.kind === "approval" ? "aprobacion" : "ejecucion"} en SSD.`,
+    summaryRows: [
+      { label: "Paso asignado", value: step.label },
+      { label: "Solicitante", value: request.requester_name },
+      { label: "Departamento", value: request.department },
+      { label: "Tipo de accion", value: step.kind === "approval" ? "Aprobacion requerida" : "Ejecucion requerida" }
+    ],
+    detailRows: buildRequestSummaryRows(request, step),
+    formRows: buildPayloadRows(request),
+    actionUrl: inboxUrl()
+  };
 
   const sent = await sendEmail({
     to: step.approver_email,
     subject: `SSD | Accion requerida ${request.ticket_code}`,
     tag: "approver_pending",
     request,
-    html: await renderNotificationTemplate({
-      previewText: `Accion requerida ${request.ticket_code}`,
-      tone: "action",
-      categoryLabel: step.kind === "approval" ? "Aprobacion" : "Ejecucion",
-      title: "Accion requerida en SSD",
-      subtitle: `Tienes una solicitud pendiente por ${actionLabel}.`,
-      greetingName: step.approver_name,
-      introText: `Se te asigno una solicitud en el paso ${step.label}.`,
-      statusLabel: "Pendiente de accion",
-      statusDetail: `${step.label} requiere tu ${step.kind === "approval" ? "aprobacion" : "ejecucion"} en SSD.`,
-      summaryHeading: "Tu intervencion",
-      summaryRows: [
-        { label: "Paso asignado", value: step.label },
-        { label: "Solicitante", value: request.requester_name },
-        { label: "Departamento", value: request.department },
-        { label: "Tipo de accion", value: step.kind === "approval" ? "Aprobacion requerida" : "Ejecucion requerida" }
-      ],
-      detailHeading: "Resumen de la solicitud",
-      detailRows: buildRequestSummaryRows(request, step),
-      formHeading: "Resumen del formulario",
-      formRows: buildPayloadRows(request),
-      actionLabel: "Abrir bandeja",
-      actionUrl: inboxUrl()
-    })
+    html: await renderEmailComponent(ApproverPendingEmail, templateProps)
   });
 
   if (sent) {
@@ -885,37 +878,37 @@ async function notifyRequesterUpdate(request: RequestDetailRecord, actedStep: Re
       : "Tu solicitud avanzo al siguiente paso del flujo.";
   const tone: EmailTone = rejectedRequest ? "danger" : finalRequest ? "success" : "info";
   const categoryLabel = rejectedRequest ? "Rechazo" : finalRequest ? "Finalizada" : "Actualizacion";
+  const summaryHeading = rejectedRequest ? "Resultado del flujo" : finalRequest ? "Cierre del proceso" : "Movimiento del flujo";
+  const templateProps: Omit<RequesterUpdateEmailProps, "brandLogoSrc" | "brandLogoAlt"> = {
+    previewText: `${title} ${request.ticket_code}`,
+    tone,
+    categoryLabel,
+    title,
+    subtitle,
+    greetingName: request.requester_name,
+    introText: `El paso ${actedStep.label} fue marcado como ${translateDecision(actedStep.decision, actedStep.status)}.`,
+    statusLabel: translateStatus(request.status),
+    statusDetail: pendingStep
+      ? `La solicitud continua con ${pendingStep.approver_name} en el paso ${pendingStep.label}.`
+      : "La solicitud ya no tiene pasos pendientes en SSD.",
+    summaryHeading,
+    summaryRows: [
+      { label: "Paso atendido", value: actedStep.label },
+      { label: "Responsable", value: actedStep.approver_name },
+      { label: "Fecha y hora", value: formatDateTime(actedStep.acted_at) },
+      { label: "Siguiente responsable", value: pendingStep ? `${pendingStep.approver_name} (${pendingStep.label})` : "Sin pasos pendientes" }
+    ],
+    detailRows: buildRequestSummaryRows(request, actedStep, extraRows),
+    signature: buildSignatureData(actedStep),
+    actionUrl: requestUrl(request)
+  };
 
   return sendEmail({
     to: request.requester_email,
     subject,
     tag: "requester_update",
     request,
-    html: await renderNotificationTemplate({
-      previewText: `${title} ${request.ticket_code}`,
-      tone,
-      categoryLabel,
-      title,
-      subtitle,
-      greetingName: request.requester_name,
-      introText: `El paso ${actedStep.label} fue marcado como ${translateDecision(actedStep.decision, actedStep.status)}.`,
-      statusLabel: translateStatus(request.status),
-      statusDetail: pendingStep
-        ? `La solicitud continua con ${pendingStep.approver_name} en el paso ${pendingStep.label}.`
-        : "La solicitud ya no tiene pasos pendientes en SSD.",
-      summaryHeading: rejectedRequest ? "Resultado del flujo" : finalRequest ? "Cierre del proceso" : "Movimiento del flujo",
-      summaryRows: [
-        { label: "Paso atendido", value: actedStep.label },
-        { label: "Responsable", value: actedStep.approver_name },
-        { label: "Fecha y hora", value: formatDateTime(actedStep.acted_at) },
-        { label: "Siguiente responsable", value: pendingStep ? `${pendingStep.approver_name} (${pendingStep.label})` : "Sin pasos pendientes" }
-      ],
-      detailHeading: "Detalle de la solicitud",
-      detailRows: buildRequestSummaryRows(request, actedStep, extraRows),
-      signature: buildSignatureData(actedStep),
-      actionLabel: "Ver detalle",
-      actionUrl: requestUrl(request)
-    })
+    html: await renderEmailComponent(RequesterUpdateEmail, templateProps)
   });
 }
 
@@ -933,39 +926,28 @@ async function notifyAdminsMobileLineApproved(request: RequestDetailRecord, acte
   const beneficiaries = parseBeneficiaries(request);
   const linksHtml =
     beneficiaries.length > 0 ? buildResponsivaLinks(request) : [];
+  const templateProps: Omit<MobileLineAdminReadyEmailProps, "brandLogoSrc" | "brandLogoAlt"> = {
+    previewText: `Linea aprobada por GG ${request.ticket_code}`,
+    summaryRows: [
+      { label: "Ticket", value: request.ticket_code },
+      { label: "Solicitante", value: request.requester_name },
+      { label: "Departamento", value: request.department },
+      { label: "Beneficiarios", value: parseBeneficiaries(request).join(", ") || "N/A" }
+    ],
+    detailRows: buildRequestSummaryRows(request, actedStep, [
+      ["Estado actual", translateStatus(request.status)],
+      ["Fecha de aprobacion GG", formatDateTime(actedStep.acted_at)]
+    ]),
+    links: linksHtml,
+    actionUrl: requestUrl(request)
+  };
 
   return sendEmail({
     to: recipients.join(", "),
     subject: `SSD | Linea aprobada por GG ${request.ticket_code}`,
     tag: "mobile_line_admin_ready",
     request,
-    html: await renderNotificationTemplate({
-      previewText: `Linea aprobada por GG ${request.ticket_code}`,
-      tone: "admin",
-      categoryLabel: "Administracion",
-      title: "Linea celular aprobada por Gerencia General",
-      subtitle: "La solicitud ya puede ser atendida administrativamente y sus cartas responsivas estan disponibles.",
-      greetingName: "equipo administrador",
-      introText: `La solicitud de linea celular fue aprobada por ${actedStep.approver_name}.`,
-      statusLabel: "Aprobada por GG",
-      statusDetail: "La solicitud paso la aprobacion ejecutiva y ya puede avanzar a la atencion administrativa.",
-      summaryHeading: "Seguimiento administrativo",
-      summaryRows: [
-        { label: "Ticket", value: request.ticket_code },
-        { label: "Solicitante", value: request.requester_name },
-        { label: "Departamento", value: request.department },
-        { label: "Beneficiarios", value: parseBeneficiaries(request).join(", ") || "N/A" }
-      ],
-      detailHeading: "Detalle de la solicitud",
-      detailRows: buildRequestSummaryRows(request, actedStep, [
-        ["Estado actual", translateStatus(request.status)],
-        ["Fecha de aprobacion GG", formatDateTime(actedStep.acted_at)]
-      ]),
-      linksHeading: "Cartas responsivas por beneficiario",
-      links: linksHtml,
-      actionLabel: "Abrir solicitud",
-      actionUrl: requestUrl(request)
-    })
+    html: await renderEmailComponent(MobileLineAdminReadyEmail, templateProps)
   });
 }
 

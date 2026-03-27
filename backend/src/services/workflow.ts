@@ -1161,7 +1161,7 @@ export async function listRequests(requesterEmail?: string, actorEmail?: string)
   return listVisibleRequests({ requesterEmail, actorEmail });
 }
 
-export async function getRequestById(id: string, actorEmail?: string) {
+export async function getRequestById(id: string, actorEmail?: string, client?: PoolClient) {
   const params: string[] = [id];
   let visibilityClause = "where r.id = $1";
 
@@ -1181,7 +1181,30 @@ export async function getRequestById(id: string, actorEmail?: string) {
     }
   }
 
-  const requestResult = await query<RequestListItem>(
+  const requestResult = client
+    ? await client.query<RequestListItem>(
+        `select
+      r.id,
+      r.ticket_code,
+      r.status,
+      r.requester_name,
+      r.requester_email,
+      r.department,
+      r.beneficiary_name,
+      r.subject,
+      r.justification,
+      r.payload,
+      r.created_at,
+      r.updated_at,
+      rt.code as request_type_code,
+      rt.name as request_type_name,
+      rt.category
+    from requests r
+    inner join request_types rt on rt.id = r.request_type_id
+    ${visibilityClause}`,
+        params
+      )
+    : await query<RequestListItem>(
     `select
       r.id,
       r.ticket_code,
@@ -1208,21 +1231,37 @@ export async function getRequestById(id: string, actorEmail?: string) {
     return null;
   }
 
-  const stepsResult = await query<RequestStepRecord>(
-    `select *
-     from request_steps
-     where request_id = $1
-     order by sequence asc`,
-    [id]
-  );
+  const stepsResult = client
+    ? await client.query<RequestStepRecord>(
+        `select *
+         from request_steps
+         where request_id = $1
+         order by sequence asc`,
+        [id]
+      )
+    : await query<RequestStepRecord>(
+        `select *
+         from request_steps
+         where request_id = $1
+         order by sequence asc`,
+        [id]
+      );
 
-  const eventsResult = await query<RequestEventRecord>(
-    `select *
-     from request_events
-     where request_id = $1
-     order by created_at asc`,
-    [id]
-  );
+  const eventsResult = client
+    ? await client.query<RequestEventRecord>(
+        `select *
+         from request_events
+         where request_id = $1
+         order by created_at asc`,
+        [id]
+      )
+    : await query<RequestEventRecord>(
+        `select *
+         from request_events
+         where request_id = $1
+         order by created_at asc`,
+        [id]
+      );
 
   const detail: RequestDetailRecord = {
     ...requestResult.rows[0],
@@ -1356,7 +1395,7 @@ export async function actOnStep(
         ]
       );
 
-      return getRequestById(requestId);
+      return getRequestById(requestId, undefined, client);
     }
 
     const upcomingStepsResult = await client.query<RequestStepRecord>(
@@ -1481,7 +1520,7 @@ export async function actOnStep(
       ]
     );
 
-    return getRequestById(requestId);
+    return getRequestById(requestId, undefined, client);
   });
 
   if (updatedRequest) {

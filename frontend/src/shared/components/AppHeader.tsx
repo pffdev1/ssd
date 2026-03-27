@@ -155,6 +155,7 @@ export function AppHeader({
   const [userOpen, setUserOpen] = useState(false);
   const catalogRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
+  const previousInboxCountRef = useRef(inboxCount);
 
   useEffect(() => {
     setCatalogOpen(false);
@@ -177,6 +178,20 @@ export function AppHeader({
     document.addEventListener("mousedown", handlePointerDown);
     return () => document.removeEventListener("mousedown", handlePointerDown);
   }, []);
+
+  useEffect(() => {
+    const previousCount = previousInboxCountRef.current;
+
+    if (inboxCount > previousCount && inboxCount > 0) {
+      const unreadLabel = inboxCount > 99 ? "99+" : String(inboxCount);
+      infoToast(
+        "Nueva alerta en SSD",
+        `Tienes ${unreadLabel} alerta${inboxCount === 1 ? "" : "s"} pendiente${inboxCount === 1 ? "" : "s"} en tu bandeja.`
+      );
+    }
+
+    previousInboxCountRef.current = inboxCount;
+  }, [inboxCount]);
 
   const navClass = (item: HeaderItem) =>
     resolvedActiveItem === item
