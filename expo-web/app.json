@@ -18,6 +18,14 @@
         "projectId": "7ec92660-4580-4a62-83a7-c4f0b03d7f17"
       }
     },
-    "owner": "pffadmin"
+    "owner": "pffadmin",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/7ec92660-4580-4a62-83a7-c4f0b03d7f17"
+    },
+    "android": {},
+    "ios": {}
   }
 }
