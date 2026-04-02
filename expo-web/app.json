@@ -1,0 +1,16 @@
+{
+  "expo": {
+    "name": "SSD Expo Web",
+    "slug": "ssd-expo-web",
+    "version": "1.0.0",
+    "scheme": "ssdexpoweb",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
