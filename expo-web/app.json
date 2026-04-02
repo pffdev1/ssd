@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "SSD Expo Web",
-    "slug": "ssd-expo-web",
+    "slug": "pedersen-connect-ssd",
     "version": "1.0.0",
     "scheme": "ssdexpoweb",
     "orientation": "portrait",
@@ -11,6 +11,13 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "7ec92660-4580-4a62-83a7-c4f0b03d7f17"
+      }
+    },
+    "owner": "pffadmin"
   }
 }
