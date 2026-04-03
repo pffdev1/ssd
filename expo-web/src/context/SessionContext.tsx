@@ -1,6 +1,6 @@
 import { createContext, PropsWithChildren, useContext, useEffect, useMemo, useState } from "react";
 import { Session } from "@supabase/supabase-js";
-import { supabase } from "@/src/lib/supabase";
+import { hasSupabaseEnv, supabase, supabaseEnvError } from "@/src/lib/supabase";
 import { checkAdmin } from "@/src/lib/api";
 
 type SessionUser = {
@@ -251,6 +251,16 @@ export function SessionProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     let active = true;
 
+    if (!hasSupabaseEnv) {
+      setUser(null);
+      setIsAdmin(false);
+      setAuthError(supabaseEnvError ?? "Configuracion de Supabase incompleta.");
+      setIsLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     async function resolveUserFromSession(nextSession: Session): Promise<SessionUser | null> {
       const metadataDirectory = mapMetadataDirectory(nextSession.user.user_metadata);
       const providerToken =
@@ -364,6 +374,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
       user,
       authError,
       async signInWithMicrosoft() {
+        if (!hasSupabaseEnv) {
+          throw new Error(supabaseEnvError ?? "Configuracion de Supabase incompleta.");
+        }
+
         setAuthError(null);
 
         const redirectTo =
@@ -385,6 +399,10 @@ export function SessionProvider({ children }: PropsWithChildren) {
         }
       },
       async signOut() {
+        if (!hasSupabaseEnv) {
+          return;
+        }
+
         setAuthError(null);
         await supabase.auth.signOut();
       }
