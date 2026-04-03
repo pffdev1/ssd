@@ -1,7 +1,8 @@
 import { Redirect } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Image, Pressable, SafeAreaView, Text, View, useWindowDimensions } from "react-native";
 import { useSession } from "@/src/context/SessionContext";
+import { hasSupabaseEnv, supabase } from "@/src/lib/supabase";
 
 const brandLogo = require("../assets/brand/pedersen-connect-logo.png");
 
@@ -50,6 +51,58 @@ export default function LoginScreen() {
 
     return Math.max(340, width - 32);
   }, [width]);
+
+  useEffect(() => {
+    let active = true;
+
+    async function resolveCodeFromLoginRoute() {
+      if (typeof window === "undefined" || !hasSupabaseEnv) {
+        return;
+      }
+
+      const currentUrl = new URL(window.location.href);
+      const authError =
+        currentUrl.searchParams.get("error_description") ?? currentUrl.searchParams.get("error");
+      const code = currentUrl.searchParams.get("code");
+
+      if (authError) {
+        if (active) {
+          setError(authError);
+        }
+        return;
+      }
+
+      if (!code) {
+        return;
+      }
+
+      if (active) {
+        setIsSigningIn(true);
+      }
+
+      const { error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
+
+      if (!active) {
+        return;
+      }
+
+      if (exchangeError) {
+        setError(exchangeError.message);
+        setIsSigningIn(false);
+        return;
+      }
+
+      window.history.replaceState({}, document.title, "/login");
+      setError(null);
+      setIsSigningIn(false);
+    }
+
+    void resolveCodeFromLoginRoute();
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function handleMicrosoftLogin() {
     if (isSigningIn || isLoading) {
