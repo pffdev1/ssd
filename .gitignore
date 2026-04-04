@@ -28,3 +28,4 @@ web-build/
 node_modules/
 # Env files
 .env.local
+.env.legacy.pre-flatten

@@ -22,10 +22,8 @@ import {
 } from "@/src/lib/api";
 import { AdminUser, CatalogItem, RequestItem, RequestType, WorkflowStepTemplate } from "@/src/lib/types";
 import {
-  buildWorkflowCodesToPersist,
   getAdditionalWorkflowCodes,
-  isManagerWorkflowStepCode,
-  resolveManagerWorkflowStepCode
+  isManagerWorkflowStepCode
 } from "@/src/lib/workflow";
 import {
   AdminSection,
@@ -34,17 +32,6 @@ import {
   CatalogViewKey
 } from "@/src/features/admin/lib/config";
 import { buildRouteCount, routingLabel, stepUsageCount } from "@/src/features/admin/lib/selectors";
-
-const MANAGER_FALLBACK_STEP_CODE = "IMMEDIATE_LEAD";
-const MANAGER_FALLBACK_SCOPE = "REQUESTER_MANAGER";
-
-function readErrorMessage(value: unknown) {
-  if (value instanceof Error) {
-    return value.message;
-  }
-
-  return String(value ?? "");
-}
 
 type AdminScreenUiState = {
   isWide: boolean;
@@ -278,10 +265,6 @@ export function useAdminScreen(): UseAdminScreenState {
         .sort((a, b) => a.sort_order - b.sort_order || a.item_label.localeCompare(b.item_label)),
     [catalogItems, activeCatalogKey]
   );
-  const managerWorkflowStepCode = useMemo(
-    () => resolveManagerWorkflowStepCode(sortedSteps),
-    [sortedSteps]
-  );
   const additionalWorkflowCodes = useMemo(() => getAdditionalWorkflowCodes(workflowCodes), [workflowCodes]);
   const activeWorkflowSteps = useMemo(
     () =>
@@ -479,38 +462,18 @@ export function useAdminScreen(): UseAdminScreenState {
     setWorkflowCodes((current) => getAdditionalWorkflowCodes([...current, stepCode]));
   }
 
-  async function ensureManagerWorkflowStepTemplate(actorEmail: string) {
-    const resolvedFromCurrent = resolveManagerWorkflowStepCode(sortedSteps);
-    if (resolvedFromCurrent) {
-      return resolvedFromCurrent;
-    }
+  function resolveFallbackWorkflowStepCode() {
+    const activeNonManagerSteps = sortedSteps.filter((step) => step.active && !isManagerWorkflowStepCode(step.code));
+    const preferredCodes = ["AREA_MANAGER", "HR_REVIEW", "FINANCE_REVIEW", "IT_REVIEW", "GG_APPROVAL"];
 
-    try {
-      const created = await createWorkflowStep({
-        actorEmail,
-        code: MANAGER_FALLBACK_STEP_CODE,
-        label: "Aprobacion de Jefatura Inmediata",
-        description: "Aprobacion automatica de la jefatura inmediata del solicitante.",
-        kind: "approval",
-        routing: "scope",
-        scope: MANAGER_FALLBACK_SCOPE,
-        sortOrder: 5
-      });
-
-      setSteps(created.steps);
-      return created.created.code;
-    } catch (error) {
-      const refreshedSteps = await getWorkflowSteps(actorEmail);
-      setSteps(refreshedSteps);
-
-      const resolvedFromRefresh = resolveManagerWorkflowStepCode(refreshedSteps);
-      if (resolvedFromRefresh) {
-        return resolvedFromRefresh;
+    for (const preferredCode of preferredCodes) {
+      const matched = activeNonManagerSteps.find((step) => step.code.trim().toUpperCase() === preferredCode);
+      if (matched) {
+        return matched.code;
       }
-
-      const details = readErrorMessage(error);
-      throw new Error(details || "No se pudo crear el paso de jefatura inmediata.");
     }
+
+    return activeNonManagerSteps[0]?.code ?? null;
   }
 
   function saveWorkflow() {
@@ -521,51 +484,33 @@ export function useAdminScreen(): UseAdminScreenState {
 
       const validCodes = new Set(sortedSteps.map((step) => step.code.trim().toUpperCase()));
       const sanitizedAdditionalWorkflowCodes = additionalWorkflowCodes.filter((code) =>
-        validCodes.has(code.trim().toUpperCase())
+        validCodes.has(code.trim().toUpperCase()) && !isManagerWorkflowStepCode(code)
       );
-      const persistence = buildWorkflowCodesToPersist(
-        sanitizedAdditionalWorkflowCodes,
-        managerWorkflowStepCode
-      );
+      let codesToPersist = sanitizedAdditionalWorkflowCodes;
+      let usedFallbackStep = false;
 
-      let codesToPersist = persistence.stepCodes;
       if (codesToPersist.length === 0) {
-        const managerStepCode = await ensureManagerWorkflowStepTemplate(user.email);
-        codesToPersist = [managerStepCode];
-      }
-
-      let result;
-      try {
-        result = await updateRequestTypeWorkflow({
-          actorEmail: user.email,
-          id: selectedRequestType.id,
-          stepCodes: codesToPersist
-        });
-      } catch (error) {
-        const message = readErrorMessage(error);
-        const requiresFallbackManagerStep =
-          message.includes("Debes mantener al menos un paso") ||
-          message.includes("Paso no permitido en el workflow");
-
-        if (!requiresFallbackManagerStep) {
-          throw error;
+        const fallbackStepCode = resolveFallbackWorkflowStepCode();
+        if (!fallbackStepCode) {
+          throw new Error("No hay pasos activos disponibles para este workflow. Crea o activa al menos uno.");
         }
-
-        const managerStepCode = await ensureManagerWorkflowStepTemplate(user.email);
-        result = await updateRequestTypeWorkflow({
-          actorEmail: user.email,
-          id: selectedRequestType.id,
-          stepCodes: [managerStepCode]
-        });
+        codesToPersist = [fallbackStepCode];
+        usedFallbackStep = true;
       }
+
+      const result = await updateRequestTypeWorkflow({
+        actorEmail: user.email,
+        id: selectedRequestType.id,
+        stepCodes: codesToPersist
+      });
 
       setRequestTypes(result.requestTypes);
-      const baseMessage = persistence.managerOnlyMode
-        ? "Workflow guardado sin pasos adicionales. Solo aprobara la jefatura inmediata."
+      const baseMessage = usedFallbackStep
+        ? `Workflow guardado con paso base ${codesToPersist[0]} para evitar rutas sin aprobador.`
         : "Workflow guardado.";
       const normalizedMessage =
         sanitizedAdditionalWorkflowCodes.length !== additionalWorkflowCodes.length
-          ? `${baseMessage} Se omitieron pasos que no existen en catalogo.`
+          ? `${baseMessage} Se omitieron pasos no compatibles.`
           : baseMessage;
       setInfo(normalizedMessage);
     });
