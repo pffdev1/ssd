@@ -5,6 +5,7 @@ import {
   CatalogItem,
   CatalogResponse,
   DashboardResponse,
+  FormFieldDefinition,
   PendingApprovalItem,
   RequestDetail,
   RequestItem,
@@ -257,6 +258,7 @@ export async function createRequestType(input: {
   description: string;
   category: string;
   themeColor: string;
+  fields: FormFieldDefinition[];
 }) {
   return sendJson<{ requestTypes: RequestType[] }>("/admin/request-types", {
     method: "POST",
@@ -271,6 +273,7 @@ export async function updateRequestType(input: {
   description: string;
   category: string;
   themeColor: string;
+  fields: FormFieldDefinition[];
 }) {
   return sendJson<{ requestTypes: RequestType[] }>(`/admin/request-types/${input.id}`, {
     method: "PATCH",
@@ -279,7 +282,8 @@ export async function updateRequestType(input: {
       name: input.name,
       description: input.description,
       category: input.category,
-      themeColor: input.themeColor
+      themeColor: input.themeColor,
+      fields: input.fields
     })
   });
 }

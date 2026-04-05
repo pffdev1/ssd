@@ -13,12 +13,14 @@ function Field({
   onChange,
   placeholder,
   multiline,
+  minHeight,
   editable = true
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   multiline?: boolean;
+  minHeight?: number;
   editable?: boolean;
 }) {
   return (
@@ -34,7 +36,7 @@ function Field({
         borderRadius: 14,
         paddingHorizontal: 12,
         paddingVertical: 10,
-        minHeight: multiline ? 84 : undefined,
+        minHeight: multiline ? (minHeight ?? 84) : undefined,
         textAlignVertical: multiline ? "top" : "auto",
         backgroundColor: editable ? "#f9fbff" : "#e2e8f0"
       }}
@@ -55,6 +57,7 @@ type CatalogsSectionProps<TCatalogKey extends string> = {
   requestTypeCategory: string;
   requestTypeDescription: string;
   requestTypeColor: string;
+  requestTypeFieldsJson: string;
   visibleCatalogItems: CatalogItem[];
   catalogItemId: string | null;
   catalogLabel: string;
@@ -67,6 +70,7 @@ type CatalogsSectionProps<TCatalogKey extends string> = {
   onRequestTypeCategoryChange: (value: string) => void;
   onRequestTypeDescriptionChange: (value: string) => void;
   onRequestTypeColorChange: (value: string) => void;
+  onRequestTypeFieldsJsonChange: (value: string) => void;
   onSaveRequestType: () => void | Promise<void>;
   onDeleteRequestType: () => void | Promise<void>;
   onSelectCatalogItem: (item: CatalogItem) => void;
@@ -89,6 +93,7 @@ export function CatalogsSection<TCatalogKey extends string>({
   requestTypeCategory,
   requestTypeDescription,
   requestTypeColor,
+  requestTypeFieldsJson,
   visibleCatalogItems,
   catalogItemId,
   catalogLabel,
@@ -101,6 +106,7 @@ export function CatalogsSection<TCatalogKey extends string>({
   onRequestTypeCategoryChange,
   onRequestTypeDescriptionChange,
   onRequestTypeColorChange,
+  onRequestTypeFieldsJsonChange,
   onSaveRequestType,
   onDeleteRequestType,
   onSelectCatalogItem,
@@ -178,6 +184,20 @@ export function CatalogsSection<TCatalogKey extends string>({
               <Field value={requestTypeCategory} onChange={onRequestTypeCategoryChange} placeholder="Categoria" />
               <Field value={requestTypeDescription} onChange={onRequestTypeDescriptionChange} placeholder="Descripcion" multiline />
               <Field value={requestTypeColor} onChange={onRequestTypeColorChange} placeholder="#0b5ed7" />
+              <Text style={{ color: "#334155", fontWeight: "700" }}>Campos del formulario (JSON)</Text>
+              <Field
+                value={requestTypeFieldsJson}
+                onChange={onRequestTypeFieldsJsonChange}
+                placeholder='[{"name":"campo","label":"Campo","type":"text","required":true}]'
+                multiline
+                minHeight={180}
+              />
+              <Text style={{ color: "#475569", fontSize: 12, lineHeight: 18 }}>
+                Campos del formulario en JSON. Tipos permitidos: text, email, textarea, date, number, dropdown, radio.
+              </Text>
+              <Text style={{ color: "#64748b", fontSize: 12, lineHeight: 18 }}>
+                {'Para dropdown/radio agrega options: [{"option":"Valor"}].'}
+              </Text>
 
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 <Pressable

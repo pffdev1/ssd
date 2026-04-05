@@ -78,6 +78,7 @@ export default function AdminScreen() {
             requestTypeCategory={sections.catalogs.requestTypeCategory}
             requestTypeDescription={sections.catalogs.requestTypeDescription}
             requestTypeColor={sections.catalogs.requestTypeColor}
+            requestTypeFieldsJson={sections.catalogs.requestTypeFieldsJson}
             visibleCatalogItems={sections.catalogs.visibleCatalogItems}
             catalogItemId={sections.catalogs.catalogItemId}
             catalogLabel={sections.catalogs.catalogLabel}
@@ -90,6 +91,7 @@ export default function AdminScreen() {
             onRequestTypeCategoryChange={sections.catalogs.onRequestTypeCategoryChange}
             onRequestTypeDescriptionChange={sections.catalogs.onRequestTypeDescriptionChange}
             onRequestTypeColorChange={sections.catalogs.onRequestTypeColorChange}
+            onRequestTypeFieldsJsonChange={sections.catalogs.onRequestTypeFieldsJsonChange}
             onSaveRequestType={sections.catalogs.onSaveRequestType}
             onDeleteRequestType={sections.catalogs.onDeleteRequestType}
             onSelectCatalogItem={sections.catalogs.onSelectCatalogItem}

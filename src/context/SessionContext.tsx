@@ -64,6 +64,8 @@ type GraphSponsorItem = {
   displayName?: string | null;
 };
 
+const DIRECTORY_CACHE_PREFIX = "ssd.directory-profile.v1";
+
 const SessionContext = createContext<SessionContextValue | undefined>(undefined);
 
 function normalizeEmail(value: string | undefined) {
@@ -212,6 +214,46 @@ function mergeDirectoryProfiles(base: DirectoryProfile, incoming: DirectoryProfi
   };
 }
 
+function getDirectoryCacheStorageKey(userId: string) {
+  return `${DIRECTORY_CACHE_PREFIX}:${userId}`;
+}
+
+function readCachedDirectoryProfile(userId: string): DirectoryProfile {
+  if (typeof window === "undefined") {
+    return {};
+  }
+
+  try {
+    const serialized = window.localStorage.getItem(getDirectoryCacheStorageKey(userId));
+
+    if (!serialized) {
+      return {};
+    }
+
+    const parsed = JSON.parse(serialized);
+
+    if (!parsed || typeof parsed !== "object") {
+      return {};
+    }
+
+    return mapMetadataDirectory(parsed as Record<string, unknown>);
+  } catch {
+    return {};
+  }
+}
+
+function writeCachedDirectoryProfile(userId: string, directory: DirectoryProfile) {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(getDirectoryCacheStorageKey(userId), JSON.stringify(directory));
+  } catch {
+    // Ignore storage errors (private mode / quota).
+  }
+}
+
 function mapAuthUser(user: {
   id: string;
   email?: string;
@@ -263,15 +305,17 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
     async function resolveUserFromSession(nextSession: Session): Promise<SessionUser | null> {
       const metadataDirectory = mapMetadataDirectory(nextSession.user.user_metadata);
+      const cachedDirectory = readCachedDirectoryProfile(nextSession.user.id);
       const providerToken =
         typeof nextSession.provider_token === "string" ? nextSession.provider_token : undefined;
+      const baseDirectory = mergeDirectoryProfiles(metadataDirectory, cachedDirectory);
 
       const graphDirectory =
-        providerToken && (!metadataDirectory.managerEmail || !metadataDirectory.department || !metadataDirectory.jobTitle)
+        providerToken && (!baseDirectory.managerEmail || !baseDirectory.department || !baseDirectory.jobTitle)
           ? await fetchDirectoryFromGraph(providerToken)
           : {};
 
-      const mergedDirectory = mergeDirectoryProfiles(metadataDirectory, graphDirectory);
+      const mergedDirectory = mergeDirectoryProfiles(baseDirectory, graphDirectory);
       const mappedUser = mapAuthUser(nextSession.user, mergedDirectory);
 
       if (!mappedUser) {
@@ -283,17 +327,23 @@ export function SessionProvider({ children }: PropsWithChildren) {
 
       if (!normalizedManagerEmail || normalizedManagerEmail === normalizedUserEmail) {
         if (active) {
-          setAuthError(
-            "Tu cuenta no tiene jefatura inmediata valida en Microsoft Entra. Contacta a TI para actualizar tu manager e intenta nuevamente."
-          );
+          setAuthError(null);
         }
-        await supabase.auth.signOut();
-        return null;
+
+        return {
+          ...mappedUser,
+          managerEmail: undefined
+        };
       }
 
       if (active) {
         setAuthError(null);
       }
+
+      writeCachedDirectoryProfile(nextSession.user.id, {
+        ...mergedDirectory,
+        managerEmail: normalizedManagerEmail
+      });
 
       return {
         ...mappedUser,
@@ -387,10 +437,7 @@ export function SessionProvider({ children }: PropsWithChildren) {
           provider: "azure",
           options: {
             redirectTo,
-            scopes: "openid profile email offline_access User.Read User.Read.All",
-            queryParams: {
-              prompt: "consent"
-            }
+            scopes: "openid profile email offline_access User.Read User.Read.All"
           }
         });
 

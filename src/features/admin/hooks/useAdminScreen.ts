@@ -20,7 +20,14 @@ import {
   updateRequestTypeWorkflow,
   updateWorkflowStep
 } from "@/src/lib/api";
-import { AdminUser, CatalogItem, RequestItem, RequestType, WorkflowStepTemplate } from "@/src/lib/types";
+import {
+  AdminUser,
+  CatalogItem,
+  FormFieldDefinition,
+  RequestItem,
+  RequestType,
+  WorkflowStepTemplate
+} from "@/src/lib/types";
 import {
   getAdditionalWorkflowCodes,
   isManagerWorkflowStepCode
@@ -65,6 +72,7 @@ type AdminCatalogsSectionState = {
   requestTypeCategory: string;
   requestTypeDescription: string;
   requestTypeColor: string;
+  requestTypeFieldsJson: string;
   visibleCatalogItems: CatalogItem[];
   catalogItemId: string | null;
   catalogLabel: string;
@@ -77,6 +85,7 @@ type AdminCatalogsSectionState = {
   onRequestTypeCategoryChange: (value: string) => void;
   onRequestTypeDescriptionChange: (value: string) => void;
   onRequestTypeColorChange: (value: string) => void;
+  onRequestTypeFieldsJsonChange: (value: string) => void;
   onSaveRequestType: () => void | Promise<void>;
   onDeleteRequestType: () => void | Promise<void>;
   onSelectCatalogItem: (item: CatalogItem) => void;
@@ -178,6 +187,110 @@ export type UseAdminScreenState = {
   };
 };
 
+const FIELD_TYPES: FormFieldDefinition["type"][] = [
+  "text",
+  "email",
+  "textarea",
+  "date",
+  "number",
+  "dropdown",
+  "radio"
+];
+
+function readOptionalString(value: unknown) {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseRequestTypeFieldsDraft(fieldsJson: string): FormFieldDefinition[] {
+  let rawPayload: unknown;
+
+  try {
+    rawPayload = JSON.parse(fieldsJson);
+  } catch {
+    throw new Error("Campos del formulario: el JSON no es valido.");
+  }
+
+  if (!Array.isArray(rawPayload)) {
+    throw new Error("Campos del formulario: debe ser un arreglo JSON.");
+  }
+
+  const seenNames = new Set<string>();
+
+  return rawPayload.map((rawItem, index) => {
+    if (!rawItem || typeof rawItem !== "object") {
+      throw new Error(`Campo #${index + 1}: formato invalido.`);
+    }
+
+    const item = rawItem as Record<string, unknown>;
+    const name = readOptionalString(item.name);
+    const label = readOptionalString(item.label);
+    const fieldType = readOptionalString(item.type);
+    const required = item.required;
+
+    if (!name) {
+      throw new Error(`Campo #${index + 1}: name es obligatorio.`);
+    }
+
+    if (!label) {
+      throw new Error(`Campo ${name}: label es obligatorio.`);
+    }
+
+    if (!fieldType || !FIELD_TYPES.includes(fieldType as FormFieldDefinition["type"])) {
+      throw new Error(
+        `Campo ${name}: type invalido. Permitidos: ${FIELD_TYPES.join(", ")}.`
+      );
+    }
+
+    const normalizedName = name.trim().toLowerCase();
+    if (seenNames.has(normalizedName)) {
+      throw new Error(`Campo ${name}: name duplicado.`);
+    }
+    seenNames.add(normalizedName);
+
+    if (required !== undefined && typeof required !== "boolean") {
+      throw new Error(`Campo ${name}: required debe ser boolean.`);
+    }
+
+    const normalizedOptions = Array.isArray(item.options)
+      ? item.options
+          .map((option, optionIndex) => {
+            if (!option || typeof option !== "object") {
+              throw new Error(`Campo ${name}: option #${optionIndex + 1} invalida.`);
+            }
+
+            const optionValue = readOptionalString((option as Record<string, unknown>).option);
+            if (!optionValue) {
+              throw new Error(`Campo ${name}: option #${optionIndex + 1} vacia.`);
+            }
+
+            return { option: optionValue };
+          })
+          .filter(Boolean)
+      : undefined;
+
+    if (["dropdown", "radio"].includes(fieldType) && (!normalizedOptions || normalizedOptions.length === 0)) {
+      throw new Error(`Campo ${name}: ${fieldType} requiere options.`);
+    }
+
+    return {
+      name,
+      label,
+      type: fieldType as FormFieldDefinition["type"],
+      ...(required !== undefined ? { required } : {}),
+      ...(readOptionalString(item.placeholder) ? { placeholder: readOptionalString(item.placeholder) } : {}),
+      ...(readOptionalString(item.helpText) ? { helpText: readOptionalString(item.helpText) } : {}),
+      ...(["dropdown", "radio"].includes(fieldType) && normalizedOptions
+        ? { options: normalizedOptions }
+        : {})
+    };
+  });
+}
+
 export function useAdminScreen(): UseAdminScreenState {
   const { width } = useWindowDimensions();
   const isWide = width >= 1220;
@@ -211,6 +324,7 @@ export function useAdminScreen(): UseAdminScreenState {
   const [requestTypeDescription, setRequestTypeDescription] = useState("");
   const [requestTypeCategory, setRequestTypeCategory] = useState("");
   const [requestTypeColor, setRequestTypeColor] = useState("#0b5ed7");
+  const [requestTypeFieldsJson, setRequestTypeFieldsJson] = useState("[]");
 
   const [workflowTypeId, setWorkflowTypeId] = useState("");
   const [workflowCodes, setWorkflowCodes] = useState<string[]>([]);
@@ -440,6 +554,7 @@ export function useAdminScreen(): UseAdminScreenState {
     setRequestTypeDescription("");
     setRequestTypeCategory("");
     setRequestTypeColor("#0b5ed7");
+    setRequestTypeFieldsJson("[]");
   }
 
   function moveWorkflowStep(fromIndex: number, toIndex: number) {
@@ -641,6 +756,7 @@ export function useAdminScreen(): UseAdminScreenState {
     setRequestTypeDescription(item.description);
     setRequestTypeCategory(item.category);
     setRequestTypeColor(item.theme_color);
+    setRequestTypeFieldsJson(JSON.stringify(item.fields ?? [], null, 2));
   }
 
   function saveRequestTypeForm() {
@@ -655,6 +771,8 @@ export function useAdminScreen(): UseAdminScreenState {
         throw new Error("Completa codigo, nombre, categoria y descripcion");
       }
 
+      const parsedFields = parseRequestTypeFieldsDraft(requestTypeFieldsJson);
+
       const result = requestTypeId
         ? await updateRequestType({
             actorEmail: user.email,
@@ -662,7 +780,8 @@ export function useAdminScreen(): UseAdminScreenState {
             name: requestTypeName.trim(),
             description: requestTypeDescription.trim(),
             category: requestTypeCategory.trim(),
-            themeColor: requestTypeColor.trim() || "#0b5ed7"
+            themeColor: requestTypeColor.trim() || "#0b5ed7",
+            fields: parsedFields
           })
         : await createRequestType({
             actorEmail: user.email,
@@ -670,7 +789,8 @@ export function useAdminScreen(): UseAdminScreenState {
             name: requestTypeName.trim(),
             description: requestTypeDescription.trim(),
             category: requestTypeCategory.trim(),
-            themeColor: requestTypeColor.trim() || "#0b5ed7"
+            themeColor: requestTypeColor.trim() || "#0b5ed7",
+            fields: parsedFields
           });
 
       setRequestTypes(result.requestTypes);
@@ -795,6 +915,7 @@ export function useAdminScreen(): UseAdminScreenState {
       requestTypeCategory,
       requestTypeDescription,
       requestTypeColor,
+      requestTypeFieldsJson,
       visibleCatalogItems,
       catalogItemId,
       catalogLabel,
@@ -807,6 +928,7 @@ export function useAdminScreen(): UseAdminScreenState {
       onRequestTypeCategoryChange: setRequestTypeCategory,
       onRequestTypeDescriptionChange: setRequestTypeDescription,
       onRequestTypeColorChange: setRequestTypeColor,
+      onRequestTypeFieldsJsonChange: setRequestTypeFieldsJson,
       onSaveRequestType: saveRequestTypeForm,
       onDeleteRequestType: deleteSelectedRequestType,
       onSelectCatalogItem: selectCatalogItemForEdit,
