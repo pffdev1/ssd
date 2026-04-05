@@ -9,12 +9,14 @@ type WorkflowsSectionProps = {
   selectedRequestTypeName: string | null;
   activeWorkflowSteps: WorkflowStepTemplate[];
   availableWorkflowSteps: WorkflowStepTemplate[];
+  legacyWorkflowCount: number;
   onSelectWorkflowType: (requestTypeId: string) => void;
   onMoveStepUp: (index: number) => void;
   onMoveStepDown: (index: number) => void;
   onRemoveStep: (stepCode: string) => void;
   onAddStep: (stepCode: string) => void;
   onSave: () => void | Promise<void>;
+  onSanitizeLegacyWorkflows: () => void | Promise<void>;
 };
 
 export function WorkflowsSection({
@@ -25,12 +27,14 @@ export function WorkflowsSection({
   selectedRequestTypeName,
   activeWorkflowSteps,
   availableWorkflowSteps,
+  legacyWorkflowCount,
   onSelectWorkflowType,
   onMoveStepUp,
   onMoveStepDown,
   onRemoveStep,
   onAddStep,
-  onSave
+  onSave,
+  onSanitizeLegacyWorkflows
 }: WorkflowsSectionProps) {
   return (
     <View style={{ flexDirection: isWide ? "row" : "column", gap: 10 }}>
@@ -201,6 +205,29 @@ export function WorkflowsSection({
           >
             <Text style={{ color: "white", fontWeight: "700" }}>Guardar workflow</Text>
           </Pressable>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <Pressable
+              onPress={() => {
+                void onSanitizeLegacyWorkflows();
+              }}
+              style={{
+                alignSelf: "flex-start",
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: "#f5c76a",
+                backgroundColor: busy ? "#f1f5f9" : "#fff7e6",
+                paddingHorizontal: 12,
+                paddingVertical: 9
+              }}
+            >
+              <Text style={{ color: "#8a5a00", fontWeight: "700" }}>Sanear workflows legacy</Text>
+            </Pressable>
+            <Text style={{ color: "#64748b", fontSize: 12 }}>
+              {legacyWorkflowCount > 0
+                ? `${legacyWorkflowCount} tipo(s) con IMMEDIATE_LEAD legacy detectado(s).`
+                : "No hay workflows legacy detectados."}
+            </Text>
+          </View>
         </View>
       </View>
     </View>

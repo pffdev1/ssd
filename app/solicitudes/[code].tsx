@@ -185,6 +185,18 @@ function formatDatePreview(value: string) {
   }).format(date);
 }
 
+function mapRequestCreationErrorMessage(submitError: unknown) {
+  const fallbackMessage = "No se pudo crear la solicitud.";
+  const sourceMessage = submitError instanceof Error ? submitError.message : fallbackMessage;
+  const normalized = sourceMessage.toUpperCase();
+
+  if (normalized.includes("IMMEDIATE_LEAD")) {
+    return "Se detecto un workflow legacy (IMMEDIATE_LEAD) sin aprobador. Solicita a un administrador sanear workflows desde Admin > Workflows.";
+  }
+
+  return sourceMessage || fallbackMessage;
+}
+
 const webResizableMultilineStyle = Platform.OS === "web" ? ({ resize: "vertical" } as const) : {};
 
 function FieldInput({
@@ -728,7 +740,7 @@ export default function SolicitudPorCodigoScreen() {
       setJustification("");
       setPayload(buildInitialFormValues(selectedType, user.name));
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "No se pudo crear la solicitud.");
+      setError(mapRequestCreationErrorMessage(submitError));
     } finally {
       setSubmitting(false);
     }

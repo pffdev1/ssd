@@ -111,12 +111,14 @@ export default function AdminScreen() {
             selectedRequestTypeName={sections.workflows.selectedRequestTypeName}
             activeWorkflowSteps={sections.workflows.activeWorkflowSteps}
             availableWorkflowSteps={sections.workflows.availableWorkflowSteps}
+            legacyWorkflowCount={sections.workflows.legacyWorkflowCount}
             onSelectWorkflowType={sections.workflows.onSelectWorkflowType}
             onMoveStepUp={sections.workflows.onMoveStepUp}
             onMoveStepDown={sections.workflows.onMoveStepDown}
             onRemoveStep={sections.workflows.onRemoveStep}
             onAddStep={sections.workflows.onAddStep}
             onSave={sections.workflows.onSave}
+            onSanitizeLegacyWorkflows={sections.workflows.onSanitizeLegacyWorkflows}
           />
         ) : null}
 

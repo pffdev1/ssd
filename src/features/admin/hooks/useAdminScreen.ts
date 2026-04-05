@@ -102,12 +102,14 @@ type AdminWorkflowsSectionState = {
   selectedRequestTypeName: string | null;
   activeWorkflowSteps: WorkflowStepTemplate[];
   availableWorkflowSteps: WorkflowStepTemplate[];
+  legacyWorkflowCount: number;
   onSelectWorkflowType: (requestTypeId: string) => void;
   onMoveStepUp: (index: number) => void;
   onMoveStepDown: (index: number) => void;
   onRemoveStep: (stepCode: string) => void;
   onAddStep: (stepCode: string) => void;
   onSave: () => void | Promise<void>;
+  onSanitizeLegacyWorkflows: () => void | Promise<void>;
 };
 
 type AdminStepsSectionState = {
@@ -291,6 +293,15 @@ function parseRequestTypeFieldsDraft(fieldsJson: string): FormFieldDefinition[] 
   });
 }
 
+function hasLegacyManagerStep(requestType: RequestType) {
+  const steps = Array.isArray(requestType.workflow?.steps) ? requestType.workflow.steps : [];
+
+  return steps.some((step) => {
+    const routing = String(step.routing ?? "").trim().toLowerCase();
+    return isManagerWorkflowStepCode(step.code) || routing === "requester_unit";
+  });
+}
+
 export function useAdminScreen(): UseAdminScreenState {
   const { width } = useWindowDimensions();
   const isWide = width >= 1220;
@@ -396,6 +407,10 @@ export function useAdminScreen(): UseAdminScreenState {
           !isManagerWorkflowStepCode(item.code)
       ),
     [sortedSteps, workflowCodes]
+  );
+  const legacyWorkflowTypes = useMemo(
+    () => requestTypes.filter((requestType) => hasLegacyManagerStep(requestType)),
+    [requestTypes]
   );
   const relatedTypesForSelectedStep = useMemo(() => {
     if (!selectedStep) {
@@ -591,6 +606,22 @@ export function useAdminScreen(): UseAdminScreenState {
     return activeNonManagerSteps[0]?.code ?? null;
   }
 
+  function resolveSanitizedWorkflowCodesForRequestType(requestType: RequestType) {
+    const steps = Array.isArray(requestType.workflow?.steps) ? requestType.workflow.steps : [];
+    const validCodes = new Set(sortedSteps.map((step) => step.code.trim().toUpperCase()));
+    const candidateCodes = getAdditionalWorkflowCodes(steps.map((step) => String(step.code ?? "")));
+    const sanitizedCodes = candidateCodes.filter(
+      (code) => validCodes.has(code.trim().toUpperCase()) && !isManagerWorkflowStepCode(code)
+    );
+
+    if (sanitizedCodes.length > 0) {
+      return sanitizedCodes;
+    }
+
+    const fallbackStepCode = resolveFallbackWorkflowStepCode();
+    return fallbackStepCode ? [fallbackStepCode] : [];
+  }
+
   function saveWorkflow() {
     return withBusy(async () => {
       if (!user?.email || !selectedRequestType) {
@@ -628,6 +659,53 @@ export function useAdminScreen(): UseAdminScreenState {
           ? `${baseMessage} Se omitieron pasos no compatibles.`
           : baseMessage;
       setInfo(normalizedMessage);
+    });
+  }
+
+  function sanitizeLegacyWorkflows() {
+    return withBusy(async () => {
+      if (!user?.email) {
+        throw new Error("No se pudo resolver el usuario autenticado.");
+      }
+
+      if (legacyWorkflowTypes.length === 0) {
+        setInfo("No se detectaron workflows legacy.");
+        return;
+      }
+
+      let updatedCount = 0;
+      const skippedCodes: string[] = [];
+      let latestRequestTypes = requestTypes;
+
+      for (const requestType of legacyWorkflowTypes) {
+        const stepCodes = resolveSanitizedWorkflowCodesForRequestType(requestType);
+
+        if (stepCodes.length === 0) {
+          skippedCodes.push(requestType.code);
+          continue;
+        }
+
+        const result = await updateRequestTypeWorkflow({
+          actorEmail: user.email,
+          id: requestType.id,
+          stepCodes
+        });
+        latestRequestTypes = result.requestTypes;
+        updatedCount += 1;
+      }
+
+      setRequestTypes(latestRequestTypes);
+      setWorkflowTypeId((currentValue) =>
+        latestRequestTypes.some((requestType) => requestType.id === currentValue)
+          ? currentValue
+          : (latestRequestTypes[0]?.id ?? "")
+      );
+
+      const summary =
+        skippedCodes.length > 0
+          ? `Se sanearon ${updatedCount} workflows. No se pudieron sanear: ${skippedCodes.join(", ")}.`
+          : `Se sanearon ${updatedCount} workflows legacy.`;
+      setInfo(summary);
     });
   }
 
@@ -944,12 +1022,14 @@ export function useAdminScreen(): UseAdminScreenState {
       selectedRequestTypeName: selectedRequestType?.name ?? null,
       activeWorkflowSteps,
       availableWorkflowSteps,
+      legacyWorkflowCount: legacyWorkflowTypes.length,
       onSelectWorkflowType: setWorkflowTypeId,
       onMoveStepUp: (index: number) => moveWorkflowStep(index, index - 1),
       onMoveStepDown: (index: number) => moveWorkflowStep(index, index + 1),
       onRemoveStep: removeWorkflowStep,
       onAddStep: addWorkflowStep,
-      onSave: saveWorkflow
+      onSave: saveWorkflow,
+      onSanitizeLegacyWorkflows: sanitizeLegacyWorkflows
     },
       steps: {
       busy,
