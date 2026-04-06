@@ -592,34 +592,13 @@ export function useAdminScreen(): UseAdminScreenState {
     setWorkflowCodes((current) => getAdditionalWorkflowCodes([...current, stepCode]));
   }
 
-  function resolveFallbackWorkflowStepCode() {
-    const activeNonManagerSteps = sortedSteps.filter((step) => step.active && !isManagerWorkflowStepCode(step.code));
-    const preferredCodes = ["AREA_MANAGER", "HR_REVIEW", "FINANCE_REVIEW", "IT_REVIEW", "GG_APPROVAL"];
-
-    for (const preferredCode of preferredCodes) {
-      const matched = activeNonManagerSteps.find((step) => step.code.trim().toUpperCase() === preferredCode);
-      if (matched) {
-        return matched.code;
-      }
-    }
-
-    return activeNonManagerSteps[0]?.code ?? null;
-  }
-
   function resolveSanitizedWorkflowCodesForRequestType(requestType: RequestType) {
     const steps = Array.isArray(requestType.workflow?.steps) ? requestType.workflow.steps : [];
     const validCodes = new Set(sortedSteps.map((step) => step.code.trim().toUpperCase()));
     const candidateCodes = getAdditionalWorkflowCodes(steps.map((step) => String(step.code ?? "")));
-    const sanitizedCodes = candidateCodes.filter(
+    return candidateCodes.filter(
       (code) => validCodes.has(code.trim().toUpperCase()) && !isManagerWorkflowStepCode(code)
     );
-
-    if (sanitizedCodes.length > 0) {
-      return sanitizedCodes;
-    }
-
-    const fallbackStepCode = resolveFallbackWorkflowStepCode();
-    return fallbackStepCode ? [fallbackStepCode] : [];
   }
 
   function saveWorkflow() {
@@ -632,28 +611,17 @@ export function useAdminScreen(): UseAdminScreenState {
       const sanitizedAdditionalWorkflowCodes = additionalWorkflowCodes.filter((code) =>
         validCodes.has(code.trim().toUpperCase()) && !isManagerWorkflowStepCode(code)
       );
-      let codesToPersist = sanitizedAdditionalWorkflowCodes;
-      let usedFallbackStep = false;
-
-      if (codesToPersist.length === 0) {
-        const fallbackStepCode = resolveFallbackWorkflowStepCode();
-        if (!fallbackStepCode) {
-          throw new Error("No hay pasos activos disponibles para este workflow. Crea o activa al menos uno.");
-        }
-        codesToPersist = [fallbackStepCode];
-        usedFallbackStep = true;
-      }
-
       const result = await updateRequestTypeWorkflow({
         actorEmail: user.email,
         id: selectedRequestType.id,
-        stepCodes: codesToPersist
+        stepCodes: sanitizedAdditionalWorkflowCodes
       });
 
       setRequestTypes(result.requestTypes);
-      const baseMessage = usedFallbackStep
-        ? `Workflow guardado con paso base ${codesToPersist[0]} para evitar rutas sin aprobador.`
-        : "Workflow guardado.";
+      const baseMessage =
+        sanitizedAdditionalWorkflowCodes.length === 0
+          ? "Workflow guardado en modo solo jefatura inmediata (sin pasos adicionales)."
+          : "Workflow guardado.";
       const normalizedMessage =
         sanitizedAdditionalWorkflowCodes.length !== additionalWorkflowCodes.length
           ? `${baseMessage} Se omitieron pasos no compatibles.`
@@ -674,16 +642,10 @@ export function useAdminScreen(): UseAdminScreenState {
       }
 
       let updatedCount = 0;
-      const skippedCodes: string[] = [];
       let latestRequestTypes = requestTypes;
 
       for (const requestType of legacyWorkflowTypes) {
         const stepCodes = resolveSanitizedWorkflowCodesForRequestType(requestType);
-
-        if (stepCodes.length === 0) {
-          skippedCodes.push(requestType.code);
-          continue;
-        }
 
         const result = await updateRequestTypeWorkflow({
           actorEmail: user.email,
@@ -701,10 +663,7 @@ export function useAdminScreen(): UseAdminScreenState {
           : (latestRequestTypes[0]?.id ?? "")
       );
 
-      const summary =
-        skippedCodes.length > 0
-          ? `Se sanearon ${updatedCount} workflows. No se pudieron sanear: ${skippedCodes.join(", ")}.`
-          : `Se sanearon ${updatedCount} workflows legacy.`;
+      const summary = `Se sanearon ${updatedCount} workflows legacy.`;
       setInfo(summary);
     });
   }

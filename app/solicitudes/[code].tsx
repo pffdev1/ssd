@@ -191,7 +191,7 @@ function mapRequestCreationErrorMessage(submitError: unknown) {
   const normalized = sourceMessage.toUpperCase();
 
   if (normalized.includes("IMMEDIATE_LEAD")) {
-    return "Se detecto un workflow legacy (IMMEDIATE_LEAD) sin aprobador. Solicita a un administrador sanear workflows desde Admin > Workflows.";
+    return "Se detecto un workflow legacy (IMMEDIATE_LEAD) sin aprobador. Solicita a un administrador sanear workflows desde Admin > Workflows y guardar ese tipo sin pasos adicionales si aplica modo solo jefatura.";
   }
 
   return sourceMessage || fallbackMessage;
