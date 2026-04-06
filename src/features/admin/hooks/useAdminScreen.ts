@@ -302,6 +302,18 @@ function hasLegacyManagerStep(requestType: RequestType) {
   });
 }
 
+function mapAdminOperationErrorMessage(nextError: unknown) {
+  const fallbackMessage = "Operacion fallida";
+  const sourceMessage = nextError instanceof Error ? nextError.message : fallbackMessage;
+  const normalized = sourceMessage.toUpperCase();
+
+  if (normalized.includes("DEBES MANTENER AL MENOS UN PASO")) {
+    return "El API actual aun exige minimo 1 paso para guardar workflow. Para flujos solo jefatura inmediata aplica la migracion SQL de limpieza legacy en Supabase (archivo db/migrations/20260405_160000_reclean_immediate_lead_workflows.sql).";
+  }
+
+  return sourceMessage || fallbackMessage;
+}
+
 export function useAdminScreen(): UseAdminScreenState {
   const { width } = useWindowDimensions();
   const isWide = width >= 1220;
@@ -556,7 +568,7 @@ export function useAdminScreen(): UseAdminScreenState {
     try {
       await action();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Operacion fallida");
+      setError(mapAdminOperationErrorMessage(nextError));
     } finally {
       setBusy(false);
     }
@@ -642,10 +654,16 @@ export function useAdminScreen(): UseAdminScreenState {
       }
 
       let updatedCount = 0;
+      const managerOnlyPendingCodes: string[] = [];
       let latestRequestTypes = requestTypes;
 
       for (const requestType of legacyWorkflowTypes) {
         const stepCodes = resolveSanitizedWorkflowCodesForRequestType(requestType);
+
+        if (stepCodes.length === 0) {
+          managerOnlyPendingCodes.push(requestType.code);
+          continue;
+        }
 
         const result = await updateRequestTypeWorkflow({
           actorEmail: user.email,
@@ -663,7 +681,10 @@ export function useAdminScreen(): UseAdminScreenState {
           : (latestRequestTypes[0]?.id ?? "")
       );
 
-      const summary = `Se sanearon ${updatedCount} workflows legacy.`;
+      const summary =
+        managerOnlyPendingCodes.length > 0
+          ? `Se sanearon ${updatedCount} workflows. Pendientes modo solo jefatura: ${managerOnlyPendingCodes.join(", ")}. Para esos aplica la migracion SQL legacy en Supabase.`
+          : `Se sanearon ${updatedCount} workflows legacy.`;
       setInfo(summary);
     });
   }
