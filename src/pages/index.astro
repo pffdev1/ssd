@@ -1,0 +1,52 @@
+---
+import { drizzle } from 'drizzle-orm/d1';
+import { eq } from 'drizzle-orm';
+import { env } from 'cloudflare:workers';
+import RequestTypeCatalog from '../components/RequestTypeCatalog';
+import { requestTypes } from '../db/schema';
+import '../styles/global.css';
+
+let items: { code: string; name: string; description: string }[] = [];
+let databaseReady = true;
+
+try {
+  const db = drizzle(env.DB);
+  items = await db.select({
+    code: requestTypes.code,
+    name: requestTypes.name,
+    description: requestTypes.description,
+  }).from(requestTypes).where(eq(requestTypes.active, true)).all();
+} catch {
+  databaseReady = false;
+}
+---
+
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#17354a" />
+    <title>SSD · Solicitudes digitales</title>
+    <meta name="description" content="Sistema de Solicitudes Digital: catálogo y gestión de solicitudes internas." />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="site-header">
+        <a class="brand" href="/" aria-label="SSD, inicio"><span class="brand-mark">S</span><span>SSD</span></a>
+        <span class="phase">Nueva plataforma · fase inicial</span>
+      </header>
+      <main>
+        <section class="hero">
+          <p class="eyebrow">Sistema de Solicitudes Digital</p>
+          <h1>Un lugar para las solicitudes de tu equipo.</h1>
+          <p class="intro">Estamos preparando el catálogo, los flujos de aprobación y el historial en la nueva plataforma.</p>
+          <div class="hero-note">Los envíos y las aprobaciones se habilitarán cuando esté lista la autenticación corporativa.</div>
+        </section>
+        {!databaseReady && <p class="setup-note" role="status">La base local aún no está preparada. Ejecuta <code>npm run db:migrate:local</code>.</p>}
+        <RequestTypeCatalog items={items} client:load />
+      </main>
+      <footer>SSD · Cloudflare Workers, D1 y R2</footer>
+    </div>
+  </body>
+</html>

@@ -2,6 +2,8 @@
 
 Documento de continuidad para trabajar en VS Code. Fecha: 2026-10-08.
 
+> Estado actualizado: la primera base Astro/Workers ya está en la raíz del repositorio y el proyecto Expo se conserva en `old/`. Incluye configuración local D1/R2, esquema inicial y catálogo de prueba. La migración funcional, autenticación y recursos Cloudflare remotos siguen pendientes. Consulta el `README.md` de la raíz para ejecutarla.
+
 ## Objetivo y alcance
 
 Migrar la idea y las capacidades de SSD a **Cloudflare Workers + D1 + R2**, con **Astro SSR**, React para formularios interactivos y un motor de estados persistido en la base de datos.

@@ -1,41 +1,31 @@
-# SSD | Sistema de Solicitudes Digital
+# SSD · nueva base Astro y Cloudflare
 
-Aplicacion web en Expo Router para gestionar solicitudes internas (personal, vacaciones, compras, TI y telefonia), conectada a Supabase cloud.
+Proyecto principal de SSD en Astro SSR para Cloudflare Workers. Esta primera fase incluye un catálogo de prueba leído desde D1, una isla React de búsqueda, el esquema inicial de datos y un binding privado R2 preparado para la siguiente fase. El cliente Expo anterior y sus notas históricas están en [`old/`](old/).
 
-## Stack
-- Frontend: Expo Router + React Native Web.
-- Auth: Supabase Auth + Microsoft Entra ID.
-- API/DB: Supabase cloud (Functions + Postgres).
+El plan de migración y las reglas pendientes están en [`docs/migracion-cloudflare-astro.md`](docs/migracion-cloudflare-astro.md).
 
-## Estructura Actual
-- `app`: rutas Expo Router.
-- `src`: componentes, contexto de sesion y cliente API.
-- `assets`: recursos estaticos.
-- `docs`: notas funcionales/tecnicas.
+## Desarrollo local
 
-## Ejecutar En Local (consumiendo Supabase cloud)
-```bash
-npm install
-npm run web:local-cloud
+Requiere Node.js 22.12 o superior y npm.
+
+```powershell
+npm ci
+npm run db:migrate:local
+npm run db:seed:local
+npm run dev
 ```
 
-URL local:
-- `http://localhost:8081`
+Abrir la URL que muestra Astro. `db:seed:local` solo agrega dos tipos de ejemplo a D1 local y puede repetirse. `npm run db:list:local` muestra las migraciones locales pendientes. También están disponibles `npm run check`, `npm run build` y `npm run preview`.
 
-## Variables De Entorno
-Archivo: `.env`
+## Alcance de esta fase
 
-- `EXPO_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co`
-- `EXPO_PUBLIC_SUPABASE_ANON_KEY=<anon-key>`
-- `EXPO_PUBLIC_API_URL=https://<project-ref>.supabase.co/functions/v1/api`
+- La página principal lee los tipos activos desde D1. `/api/health` comprueba la conexión local a D1.
+- `migrations/0001_initial.sql` define solicitudes, versiones de flujo, pasos, historial, documentos y outbox. Son tablas iniciales; todavía no se ejecutan transiciones de solicitudes.
+- `DOCUMENTS` es un binding R2 local. No existen aún cargas ni descargas de documentos.
+- No hay autenticación corporativa, formularios de envío ni aprobaciones. Esas acciones requieren sesiones verificadas, autorización por paso, concurrencia e idempotencia antes de habilitarse.
 
-## Login Microsoft Entra
-- Habilitar proveedor `Azure` en Supabase Auth.
-- Agregar redirect URL:
-  - `http://localhost:8081/auth/callback`
+## Cloudflare remoto
 
-## Scripts
-- `npm run web`: inicia Expo Web.
-- `npm run web:local-cloud`: inicia en `localhost:8081` usando Supabase cloud.
-- `npm run build:web`: genera build web.
-- `npm run typecheck`: validacion TypeScript.
+`wrangler.jsonc` usa un ID D1 de marcador y nombres de recursos locales. Antes de desplegar, crear los recursos de la cuenta, sustituir el ID y los nombres por los reales, y configurar Entra y cualquier secreto necesario. No se han creado recursos remotos ni aplicado migraciones remotas.
+
+Aplicar las migraciones D1 remotas es un paso independiente del despliegue del Worker. Comprobar la lista remota, aplicar deliberadamente las pendientes y volver a comprobar que no queden pendientes antes de publicar código que dependa del esquema. No usar los datos de `scripts/seed-local.sql` en producción.
